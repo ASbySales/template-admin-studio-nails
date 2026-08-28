@@ -134,6 +134,75 @@ export default function Dashboard() {
         }
     }
 
+    // Calcula o valor total de uma solicitação a partir de seus itens e opcionais em tempo real (fallback)
+    const calcularTotalSolicitacaoReal = (sol) => {
+        let total = 0
+        if (!sol.itens_agendamento || !servicos.length) return 0
+
+        const itensPrincipais = sol.itens_agendamento.filter(i => i.parent_item_id === null)
+        itensPrincipais.forEach(itemPrincipal => {
+            const servPrincipal = servicos.find(s => s.id === itemPrincipal.servico_id)
+            if (!servPrincipal) return
+
+            let valorBase = parseFloat(servPrincipal.valor)
+            let subtotalItem = valorBase
+
+            const opcionais = sol.itens_agendamento.filter(i => i.parent_item_id === itemPrincipal.id)
+            opcionais.forEach(opcItem => {
+                const opc = servicos.find(s => s.id === opcItem.servico_id)
+                if (opc && opcItem.quantidade > 0) {
+                    let valorOpc = parseFloat(opc.valor)
+                    if (opc.tipo === 'substitutivo') {
+                        let valorUnidadeSimples = valorBase / 10
+                        subtotalItem += opcItem.quantidade * (valorOpc - valorUnidadeSimples)
+                    } else {
+                        subtotalItem += opcItem.quantidade * valorOpc
+                    }
+                }
+            })
+            total += subtotalItem
+        })
+        return total
+    }
+
+    const exibirValorTotal = (sol) => {
+        const val = parseFloat(sol.valor_total)
+        if (isNaN(val) || val <= 0) {
+            return calcularTotalSolicitacaoReal(sol)
+        }
+        return val
+    }
+
+    // Calcula o total dos itens editados no modal
+    const calcularTotalEdicao = () => {
+        let total = 0
+        if (!servicos.length) return 0
+
+        editItens.forEach(item => {
+            const servPrincipal = servicos.find(s => s.id === item.servico_id)
+            if (!servPrincipal) return
+
+            let valorBase = parseFloat(servPrincipal.valor)
+            let subtotalItem = valorBase
+
+            Object.entries(item.opcionais).forEach(([idStr, qtd]) => {
+                const id = parseInt(idStr)
+                const opc = servicos.find(s => s.id === id)
+                if (opc && qtd > 0) {
+                    let valorOpc = parseFloat(opc.valor)
+                    if (opc.tipo === 'substitutivo') {
+                        let valorUnidadeSimples = valorBase / 10
+                        subtotalItem += qtd * (valorOpc - valorUnidadeSimples)
+                    } else {
+                        subtotalItem += qtd * valorOpc
+                    }
+                }
+            })
+            total += subtotalItem
+        })
+        return total
+    }
+
     // Abre o Modal de Edição populando os estados locais
     const handleOpenEditModal = (sol) => {
         setEditingSolicitacao(sol)
@@ -213,12 +282,13 @@ export default function Dashboard() {
         try {
             setLoading(true)
             
-            // 1. Atualiza Nome e Telefone no cabeçalho
+            // 1. Atualiza Nome, Telefone e o valor_total recalculado!
             const { error: errCabecalho } = await supabase
                 .from('solicitacoes_agendamento')
                 .update({
                     nome_cliente: editNome.trim(),
-                    whatsapp_cliente: editWhatsapp
+                    whatsapp_cliente: editWhatsapp,
+                    valor_total: calcularTotalEdicao()
                 })
                 .eq('id', editingSolicitacao.id)
 
@@ -443,7 +513,7 @@ export default function Dashboard() {
                                 <div className="flex justify-between items-center">
                                     <div className="flex flex-col text-left">
                                         <span className="text-[9px] text-gray-400 font-bold uppercase tracking-wider leading-none">Subtotal</span>
-                                        <span className="text-sm font-bold text-[#C08A89] mt-0.5">R$ {parseFloat(sol.valor_total).toFixed(2).replace('.', ',')}</span>
+                                        <span className="text-sm font-bold text-[#C08A89] mt-0.5">R$ {exibirValorTotal(sol).toFixed(2).replace('.', ',')}</span>
                                     </div>
                                     <span className={`text-[9px] font-bold rounded-full px-2.5 py-0.5 uppercase tracking-wider ${
                                         sol.status === 'aprovado' ? 'bg-green-50 text-green-700 border border-green-200' :
