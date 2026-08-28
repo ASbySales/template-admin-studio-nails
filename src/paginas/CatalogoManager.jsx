@@ -207,7 +207,7 @@ export default function CatalogoManager() {
             fetchDados()
         } catch (error) {
             console.error('Erro ao deletar serviço:', error)
-            showToast('Não foi possível excluir o serviço.')
+            showToast('Não foi possível excluir the serviço.')
         }
     }
 
@@ -320,7 +320,6 @@ export default function CatalogoManager() {
                 </div>
             </header>
 
-
             {/* Container Principal */}
             <main className="flex-1 max-w-[1000px] w-full mx-auto p-4 md:p-6 flex flex-col gap-6">
                 
@@ -406,9 +405,6 @@ export default function CatalogoManager() {
                 )}
             </main>
 
-            {/* ========================================================================= */}
-            {/* MODAL DE FORMULÁRIO (CADASTRAR / EDITAR SERVIÇO) */}
-            {/* ========================================================================= */}
             {modalAberto && (
                 <div className="fixed inset-0 z-50 flex justify-center items-center bg-black/40 backdrop-blur-xs px-4">
                     <form onSubmit={handleSalvarServico} className="w-full max-w-[420px] max-h-[85vh] rounded-3xl flex flex-col bg-white ring-1 ring-[#D9A09E]/50 shadow-2xl p-4 overflow-hidden relative">
@@ -706,4 +702,3 @@ export default function CatalogoManager() {
         </div>
     )
 }
-
