@@ -535,15 +535,15 @@ export default function CatalogoManager() {
                             </div>
 
                             <div className="flex flex-col gap-1">
-                                <label className="text-xs font-bold text-gray-700">Tipo de Adicional (Apenas Opcionais)</label>
+                                <label className="text-xs font-bold text-gray-700">Tipo de Cobrança / Unidades</label>
                                 <select 
                                     value={formTipo}
                                     onChange={(e) => setFormTipo(e.target.value)}
                                     className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:border-[#C08A89] bg-white"
                                 >
-                                    <option value="">Serviço Principal / Comum (Nulo)</option>
-                                    <option value="extra">Extra (Soma o valor bruto)</option>
-                                    <option value="substitutivo">Substitutivo (Substitui fração base)</option>
+                                    <option value="">Serviço Fechado / Principal (Dose única - sem seletor de unidades)</option>
+                                    <option value="extra">Serviço Unitário / Avulso (Permite escolher quantidade no catálogo e carrinho)</option>
+                                    <option value="substitutivo">Unitário Substitutivo (Substitui fração base)</option>
                                 </select>
                             </div>
 
@@ -556,7 +556,7 @@ export default function CatalogoManager() {
                                     className="w-4.5 h-4.5 rounded text-[#C08A89] focus:ring-[#C08A89] border-gray-300 accent-[#C08A89] cursor-pointer"
                                 />
                                 <label htmlFor="aceita_adicionais" className="text-xs font-bold text-gray-700 cursor-pointer select-none">
-                                    Permitir Adicionais / Unitários neste serviço
+                                    Permitir adicionar Unitários neste serviço
                                 </label>
                             </div>
                         </div>
