@@ -342,10 +342,14 @@ export default function CatalogoManager() {
                             return (
                                 <div key={cat.id} className="w-full flex flex-col gap-3 text-left">
                                     <div className="flex justify-between items-center border-b border-[#D9A09E]/30 pb-2">
-                                        <h2 className="text-lg font-cinzel font-bold text-gray-800 tracking-wide">
-                                            {cat.nome}
-                                            <span className="text-[10px] font-sans font-bold text-[#C08A89] ml-2 bg-[#D9A09E]/10 rounded-full px-2 py-0.5">
-                                                {cat.escolha ? 'Catálogo Principal' : 'Apenas Opcionais'}
+                                        <h2 className="text-lg font-cinzel font-bold text-gray-800 tracking-wide flex items-center flex-wrap gap-2">
+                                            <span>{cat.nome}</span>
+                                            <span className={`text-[10px] font-sans font-bold rounded-full px-2.5 py-0.5 border ${
+                                                cat.escolha 
+                                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+                                                    : 'bg-purple-50 text-purple-700 border-purple-200'
+                                            }`}>
+                                                {cat.escolha ? '🟢 Cardápio Principal' : '🟣 Lista de Complementos'}
                                             </span>
                                         </h2>
                                         <span className="text-xs text-gray-400 font-semibold">{servsDaCat.length} itens</span>
@@ -369,9 +373,19 @@ export default function CatalogoManager() {
                                                             </span>
                                                             <div className="flex items-center gap-2 mt-1">
                                                                 <span className="text-xs font-bold text-[#C08A89]">R$ {parseFloat(serv.valor).toFixed(2).replace('.', ',')}</span>
-                                                                {serv.tipo && (
-                                                                    <span className="text-[8px] uppercase tracking-wider font-bold bg-gray-100 text-gray-500 rounded px-1 py-0.5">
-                                                                        {serv.tipo}
+                                                                {serv.tipo === 'extra' && (
+                                                                    <span className="text-[8px] font-bold bg-amber-50 text-amber-700 border border-amber-200 rounded px-1.5 py-0.5">
+                                                                        Unidade (Acrescenta)
+                                                                    </span>
+                                                                )}
+                                                                {serv.tipo === 'substitutivo' && (
+                                                                    <span className="text-[8px] font-bold bg-purple-50 text-purple-700 border border-purple-200 rounded px-1.5 py-0.5">
+                                                                        Substitui Unidade
+                                                                    </span>
+                                                                )}
+                                                                {!serv.tipo && (
+                                                                    <span className="text-[8px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 rounded px-1.5 py-0.5">
+                                                                        Completo (10 unhas)
                                                                     </span>
                                                                 )}
                                                             </div>
@@ -541,9 +555,9 @@ export default function CatalogoManager() {
                                     onChange={(e) => setFormTipo(e.target.value)}
                                     className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:border-[#C08A89] bg-white"
                                 >
-                                    <option value="">Serviço Fechado / Principal (Dose única - sem seletor de unidades)</option>
-                                    <option value="extra">Serviço Unitário / Avulso (Permite escolher quantidade no catálogo e carrinho)</option>
-                                    <option value="substitutivo">Unitário Substitutivo (Substitui fração base)</option>
+                                    <option value="">Serviço Completo (mão completa — 10 unhas)</option>
+                                    <option value="extra">Unidade da unha (ex.: remoção — acrescenta)</option>
+                                    <option value="substitutivo">Substituição da unidade da unha (ex.: encapsulamento — substitui)</option>
                                 </select>
                             </div>
 
@@ -616,14 +630,14 @@ export default function CatalogoManager() {
                                 </div>
 
                                 <div className="flex flex-col gap-1">
-                                    <label className="text-[11px] font-bold text-gray-500">Tipo de Exibição</label>
+                                    <label className="text-[11px] font-bold text-gray-500">Tipo de Exibição no Catálogo</label>
                                     <select 
                                         value={catEscolha ? 'true' : 'false'}
                                         onChange={(e) => setCatEscolha(e.target.value === 'true')}
                                         className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:border-[#C08A89] bg-white"
                                     >
-                                        <option value="true">Catálogo Principal (Exibe como carrossel no site)</option>
-                                        <option value="false">Apenas Opcionais (Aparece dentro do modal de serviços)</option>
+                                        <option value="true">🟢 Cardápio Principal (Visível na página inicial)</option>
+                                        <option value="false">🟣 Lista de Complementos / Extras (Apenas como adicionais de outro item)</option>
                                     </select>
                                 </div>
 
@@ -660,11 +674,11 @@ export default function CatalogoManager() {
                                         <p className="text-xs text-gray-400 italic py-2 text-center">Nenhuma categoria cadastrada.</p>
                                     ) : (
                                         categorias.map((cat) => (
-                                            <div key={cat.id} className="bg-white rounded-xl border border-gray-200/80 p-2.5 flex items-center justify-between gap-3 shadow-3xs">
+                                             <div key={cat.id} className="bg-white rounded-xl border border-gray-200/80 p-2.5 flex items-center justify-between gap-3 shadow-3xs">
                                                 <div className="flex flex-col min-w-0">
                                                     <span className="text-xs font-bold text-gray-800 truncate">{cat.nome}</span>
-                                                    <span className="text-[9px] text-[#C08A89] font-semibold mt-0.5">
-                                                        {cat.escolha ? 'Carrossel Principal' : 'Modal de Adicionais'}
+                                                    <span className="text-[9px] font-semibold mt-0.5 text-gray-500">
+                                                        {cat.escolha ? '🟢 Cardápio Principal' : '🟣 Lista de Complementos'}
                                                     </span>
                                                 </div>
 
