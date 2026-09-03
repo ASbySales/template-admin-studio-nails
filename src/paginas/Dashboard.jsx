@@ -526,53 +526,58 @@ export default function Dashboard() {
                                     </span>
                                 </div>
 
-                                {/* Barra de Ações Rápidas de Admin com Ícones de Alta Precisão */}
-                                <div className="border-t border-gray-100 pt-2.5 flex gap-2 justify-end">
+                                {/* Barra de Ações Rápidas com Nomes e Ícones Claros */}
+                                <div className="border-t border-gray-100 pt-2.5 flex flex-wrap gap-1.5 justify-end">
                                     <button 
                                         onClick={() => handleOpenEditModal(sol)}
-                                        className="h-8 w-8 rounded-xl bg-gray-50 hover:bg-gray-100 flex justify-center items-center text-gray-600 border border-gray-200/80 transition-colors cursor-pointer"
+                                        className="px-2 py-1 rounded-lg bg-gray-50 hover:bg-gray-100 flex items-center gap-1 text-gray-600 border border-gray-200/80 text-[11px] font-semibold transition-colors cursor-pointer"
                                         title="Editar agendamento"
                                     >
-                                        <Edit3 className="w-3.5 h-3.5" />
+                                        <Edit3 className="w-3 h-3" />
+                                        <span>Editar</span>
                                     </button>
 
                                     {sol.status !== 'aprovado' && sol.status !== 'cumprido' && (
                                         <button 
                                             onClick={() => handleUpdateStatus(sol.id, 'aprovado')}
-                                            className="h-8 w-8 rounded-xl bg-green-50 hover:bg-green-100 text-green-600 border border-green-200 flex justify-center items-center transition-colors cursor-pointer"
+                                            className="px-2.5 py-1 rounded-lg bg-green-50 hover:bg-green-100 text-green-700 border border-green-200 flex items-center gap-1 text-[11px] font-bold transition-colors cursor-pointer"
                                             title="Aprovar agendamento"
                                         >
-                                            <Check className="w-4 h-4" />
+                                            <Check className="w-3.5 h-3.5" />
+                                            <span>Aprovar</span>
                                         </button>
                                     )}
 
                                     {sol.status !== 'negado' && sol.status !== 'cumprido' && (
                                         <button 
                                             onClick={() => handleUpdateStatus(sol.id, 'negado')}
-                                            className="h-8 w-8 rounded-xl bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 flex justify-center items-center transition-colors cursor-pointer"
-                                            title="Negar agendamento"
+                                            className="px-2.5 py-1 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 flex items-center gap-1 text-[11px] font-bold transition-colors cursor-pointer"
+                                            title="Recusar agendamento"
                                         >
-                                            <X className="w-4 h-4" />
+                                            <X className="w-3.5 h-3.5" />
+                                            <span>Recusar</span>
                                         </button>
                                     )}
 
                                     {sol.status === 'aprovado' && (
                                         <button 
                                             onClick={() => handleUpdateStatus(sol.id, 'cumprido')}
-                                            className="h-8 w-8 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-200 flex justify-center items-center transition-colors cursor-pointer"
-                                            title="Marcar como Cumprido"
+                                            className="px-2.5 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 flex items-center gap-1 text-[11px] font-bold transition-colors cursor-pointer"
+                                            title="Marcar como Concluído / Atendido"
                                         >
                                             <CheckSquare className="w-3.5 h-3.5" />
+                                            <span>Concluir</span>
                                         </button>
                                     )}
 
                                     {(sol.status === 'aprovado' || sol.status === 'negado' || sol.status === 'cumprido') && (
                                         <button 
                                             onClick={() => handleUpdateStatus(sol.id, 'pendente')}
-                                            className="h-8 w-8 rounded-xl bg-yellow-50 hover:bg-yellow-100 text-yellow-600 border border-yellow-200 flex justify-center items-center transition-colors cursor-pointer"
+                                            className="px-2 py-1 rounded-lg bg-yellow-50 hover:bg-yellow-100 text-yellow-700 border border-yellow-200 flex items-center gap-1 text-[11px] font-semibold transition-colors cursor-pointer"
                                             title="Retornar para Pendente"
                                         >
-                                            <Slash className="w-3.5 h-3.5" />
+                                            <Slash className="w-3 h-3" />
+                                            <span>Pendente</span>
                                         </button>
                                     )}
                                 </div>
