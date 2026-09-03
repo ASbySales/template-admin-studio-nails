@@ -349,7 +349,7 @@ export default function CatalogoManager() {
                                                     ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
                                                     : 'bg-purple-50 text-purple-700 border-purple-200'
                                             }`}>
-                                                {cat.escolha ? '🟢 Cardápio Principal' : '🟣 Lista de Complementos'}
+                                                {cat.escolha ? 'Aparece no catálogo' : 'Não aparece no catálogo'}
                                             </span>
                                         </h2>
                                         <span className="text-xs text-gray-400 font-semibold">{servsDaCat.length} itens</span>
@@ -630,14 +630,14 @@ export default function CatalogoManager() {
                                 </div>
 
                                 <div className="flex flex-col gap-1">
-                                    <label className="text-[11px] font-bold text-gray-500">Tipo de Exibição no Catálogo</label>
+                                    <label className="text-[11px] font-bold text-gray-500">Tipo de Exibição</label>
                                     <select 
                                         value={catEscolha ? 'true' : 'false'}
                                         onChange={(e) => setCatEscolha(e.target.value === 'true')}
                                         className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:border-[#C08A89] bg-white"
                                     >
-                                        <option value="true">🟢 Cardápio Principal (Visível na página inicial)</option>
-                                        <option value="false">🟣 Lista de Complementos / Extras (Apenas como adicionais de outro item)</option>
+                                        <option value="true">Aparece no catálogo (Visível na página inicial)</option>
+                                        <option value="false">Não aparece no catálogo (Apenas como adicionais de outro item)</option>
                                     </select>
                                 </div>
 
@@ -678,7 +678,7 @@ export default function CatalogoManager() {
                                                 <div className="flex flex-col min-w-0">
                                                     <span className="text-xs font-bold text-gray-800 truncate">{cat.nome}</span>
                                                     <span className="text-[9px] font-semibold mt-0.5 text-gray-500">
-                                                        {cat.escolha ? '🟢 Cardápio Principal' : '🟣 Lista de Complementos'}
+                                                        {cat.escolha ? 'Aparece no catálogo' : 'Não aparece no catálogo'}
                                                     </span>
                                                 </div>
 
