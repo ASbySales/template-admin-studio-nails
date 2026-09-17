@@ -12,7 +12,7 @@ import {
     DollarSign,
     Layers
 } from 'lucide-react'
-import JKStudioNailsOnlyLogo from '../assets/JKStudioNailsOnlyLogo.png'
+import AlbertSalesLogo from '../assets/AlbertSalesLogo.png'
 
 export default function CatalogoManager() {
     const [servicos, setServicos] = useState([])
@@ -276,7 +276,7 @@ export default function CatalogoManager() {
             
             {/* Toast flutuante */}
             {toastMessage && (
-                <div className="fixed top-4 right-4 z-50 bg-[#C08A89] text-white px-5 py-3 rounded-2xl shadow-2xl font-semibold flex items-center gap-2 border border-white/20">
+                <div className="fixed top-4 right-4 z-50 bg-[#C5A059] text-white px-5 py-3 rounded-2xl shadow-2xl font-semibold flex items-center gap-2 border border-white/20">
                     <Sparkles className="w-5 h-5 animate-pulse" />
                     <span>{toastMessage}</span>
                 </div>
@@ -292,8 +292,8 @@ export default function CatalogoManager() {
                         <ArrowLeft className="w-4 h-4" />
                     </button>
                     <div className="text-left">
-                        <h1 className="text-md font-cinzel font-bold text-gray-800 tracking-wider">JOYCE KAYANE</h1>
-                        <span className="text-[10px] block font-sans font-semibold text-gray-400">GERENCIAR CATALOGO</span>
+                        <h1 className="text-md font-cinzel font-bold text-gray-900 tracking-wider">ALBERT SALES</h1>
+                        <span className="text-[10px] block font-sans font-bold text-amber-700">GERENCIAR CATÁLOGO (MODELO)</span>
                     </div>
                 </div>
 
@@ -305,14 +305,14 @@ export default function CatalogoManager() {
                             setCatEscolha(true)
                             setCatModalAberto(true)
                         }}
-                        className="flex items-center gap-1.5 text-xs font-bold text-[#C08A89] border border-[#C08A89] hover:bg-[#C08A89]/5 px-4 py-2.5 rounded-xl transition-all cursor-pointer hover:scale-[1.02] active:scale-95"
+                        className="flex items-center gap-1.5 text-xs font-bold text-[#C5A059] border border-[#C5A059] hover:bg-[#C5A059]/5 px-4 py-2.5 rounded-xl transition-all cursor-pointer hover:scale-[1.02] active:scale-95"
                     >
                         <Layers className="w-4 h-4" />
                         <span>Categorias</span>
                     </button>
                     <button 
                         onClick={handleOpenCreateModal}
-                        className="flex items-center gap-1.5 text-xs font-bold text-white bg-[#C08A89] hover:bg-[#b07978] px-4 py-2.5 rounded-xl shadow-sm transition-all cursor-pointer hover:scale-[1.02] active:scale-95"
+                        className="flex items-center gap-1.5 text-xs font-bold text-white bg-[#C5A059] hover:bg-[#b07978] px-4 py-2.5 rounded-xl shadow-sm transition-all cursor-pointer hover:scale-[1.02] active:scale-95"
                     >
                         <Plus className="w-4 h-4" />
                         <span>Novo Serviço</span>
@@ -325,12 +325,12 @@ export default function CatalogoManager() {
                 
                 {loading ? (
                     <div className="flex-1 flex flex-col items-center justify-center py-20 gap-3">
-                        <div className="w-10 h-10 border-4 border-[#C08A89]/20 border-t-[#C08A89] rounded-full animate-spin"></div>
+                        <div className="w-10 h-10 border-4 border-[#C5A059]/20 border-t-[#C5A059] rounded-full animate-spin"></div>
                         <p className="text-sm text-gray-400 font-semibold font-cinzel">Carregando catálogo...</p>
                     </div>
                 ) : categorias.length === 0 ? (
                     <div className="bg-white rounded-3xl p-10 flex flex-col items-center justify-center text-center border border-gray-100 shadow-sm gap-2">
-                        <Layers className="w-12 h-12 text-[#C08A89]/30" />
+                        <Layers className="w-12 h-12 text-[#C5A059]/30" />
                         <p className="font-semibold text-gray-500">Nenhuma categoria cadastrada</p>
                         <p className="text-xs text-gray-400">Por favor, cadastre primeiro as categorias no seu banco de dados Supabase.</p>
                     </div>
@@ -363,7 +363,7 @@ export default function CatalogoManager() {
                                                 <div key={serv.id} className="bg-white rounded-2xl border border-gray-200/80 p-3.5 shadow-2xs hover:shadow-xs transition-shadow flex items-center justify-between gap-4">
                                                     <div className="flex items-center gap-3.5 min-w-0">
                                                         <img 
-                                                            src={serv.img || JKStudioNailsOnlyLogo} 
+                                                            src={serv.img || AlbertSalesLogo} 
                                                             className="w-12 h-12 rounded-xl object-cover bg-gray-50 border border-gray-100 flex-shrink-0" 
                                                         />
                                                         <div className="flex flex-col min-w-0">
@@ -372,7 +372,7 @@ export default function CatalogoManager() {
                                                                 {serv.descricao || 'Sem descrição cadastrada'}
                                                             </span>
                                                             <div className="flex items-center gap-2 mt-1">
-                                                                <span className="text-xs font-bold text-[#C08A89]">R$ {parseFloat(serv.valor).toFixed(2).replace('.', ',')}</span>
+                                                                <span className="text-xs font-bold text-[#C5A059]">R$ {parseFloat(serv.valor).toFixed(2).replace('.', ',')}</span>
                                                                 {serv.tipo === 'extra' && (
                                                                     <span className="text-[8px] font-bold bg-amber-50 text-amber-700 border border-amber-200 rounded px-1.5 py-0.5">
                                                                         Unidade (Acrescenta)
@@ -445,7 +445,7 @@ export default function CatalogoManager() {
                                     value={formNome}
                                     onChange={(e) => setFormNome(e.target.value)}
                                     placeholder="Ex: Alongamento em Gel"
-                                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:border-[#C08A89]"
+                                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:border-[#C5A059]"
                                     required
                                 />
                             </div>
@@ -456,7 +456,7 @@ export default function CatalogoManager() {
                                     value={formDescricao}
                                     onChange={(e) => setFormDescricao(e.target.value)}
                                     placeholder="Ex: Aplicação de alongamento de alta resistência com acabamento fino."
-                                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:border-[#C08A89] min-h-[60px]"
+                                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:border-[#C5A059] min-h-[60px]"
                                 />
                             </div>
 
@@ -471,7 +471,7 @@ export default function CatalogoManager() {
                                         value={formValor}
                                         onChange={(e) => setFormValor(e.target.value)}
                                         placeholder="35,00"
-                                        className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:border-[#C08A89]"
+                                        className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:border-[#C5A059]"
                                         required
                                     />
                                 </div>
@@ -484,7 +484,7 @@ export default function CatalogoManager() {
                                     <select 
                                         value={formCategoriaId}
                                         onChange={(e) => setFormCategoriaId(e.target.value)}
-                                        className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:border-[#C08A89] bg-white"
+                                        className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:border-[#C5A059] bg-white"
                                         required
                                     >
                                         {categorias.map((cat) => (
@@ -511,13 +511,13 @@ export default function CatalogoManager() {
                                         <div className="flex flex-col items-center gap-1.5 text-center pointer-events-none">
                                             {uploading ? (
                                                 <>
-                                                    <div className="w-5 h-5 border-2 border-[#C08A89]/20 border-t-[#C08A89] rounded-full animate-spin"></div>
+                                                    <div className="w-5 h-5 border-2 border-[#C5A059]/20 border-t-[#C5A059] rounded-full animate-spin"></div>
                                                     <span className="text-[11px] font-semibold text-gray-500">Fazendo upload...</span>
                                                 </>
                                             ) : formImg ? (
                                                 <>
                                                     <img src={formImg} className="w-16 h-16 rounded-lg object-cover border border-gray-200" />
-                                                    <span className="text-[10px] font-semibold text-[#C08A89] group-hover:underline">Trocar imagem</span>
+                                                    <span className="text-[10px] font-semibold text-[#C5A059] group-hover:underline">Trocar imagem</span>
                                                 </>
                                             ) : (
                                                 <>
@@ -553,7 +553,7 @@ export default function CatalogoManager() {
                                 <select 
                                     value={formTipo}
                                     onChange={(e) => setFormTipo(e.target.value)}
-                                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:border-[#C08A89] bg-white"
+                                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:border-[#C5A059] bg-white"
                                 >
                                     <option value="">Serviço Completo (mão completa — 10 unhas)</option>
                                     <option value="extra">Unidade da unha (ex.: remoção — acrescenta)</option>
@@ -567,7 +567,7 @@ export default function CatalogoManager() {
                                     id="aceita_adicionais"
                                     checked={formAceitaAdicionais}
                                     onChange={(e) => setFormAceitaAdicionais(e.target.checked)}
-                                    className="w-4.5 h-4.5 rounded text-[#C08A89] focus:ring-[#C08A89] border-gray-300 accent-[#C08A89] cursor-pointer"
+                                    className="w-4.5 h-4.5 rounded text-[#C5A059] focus:ring-[#C5A059] border-gray-300 accent-[#C5A059] cursor-pointer"
                                 />
                                 <label htmlFor="aceita_adicionais" className="text-xs font-bold text-gray-700 cursor-pointer select-none">
                                     Permitir adicionar Unitários neste serviço
@@ -578,7 +578,7 @@ export default function CatalogoManager() {
                         <div className="pt-3 border-t border-gray-100 flex flex-col gap-2">
                             <button 
                                 type="submit"
-                                className="w-full py-2.5 bg-[#C08A89] hover:bg-[#b07978] text-white font-bold text-sm rounded-xl shadow-md hover:scale-[1.02] active:scale-95 transition-all cursor-pointer flex justify-center items-center gap-2"
+                                className="w-full py-2.5 bg-[#C5A059] hover:bg-[#b07978] text-white font-bold text-sm rounded-xl shadow-md hover:scale-[1.02] active:scale-95 transition-all cursor-pointer flex justify-center items-center gap-2"
                             >
                                 <Save className="w-4 h-4" />
                                 <span>Salvar no Catálogo</span>
@@ -624,7 +624,7 @@ export default function CatalogoManager() {
                                         value={catNome}
                                         onChange={(e) => setCatNome(e.target.value)}
                                         placeholder="Ex: Banho em Gel ou Unhas Decoradas"
-                                        className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:border-[#C08A89] bg-white"
+                                        className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:border-[#C5A059] bg-white"
                                         required
                                     />
                                 </div>
@@ -634,7 +634,7 @@ export default function CatalogoManager() {
                                     <select 
                                         value={catEscolha ? 'true' : 'false'}
                                         onChange={(e) => setCatEscolha(e.target.value === 'true')}
-                                        className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:border-[#C08A89] bg-white"
+                                        className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:border-[#C5A059] bg-white"
                                     >
                                         <option value="true">Aparece no catálogo (Visível na página inicial)</option>
                                         <option value="false">Não aparece no catálogo (Apenas como adicionais de outro item)</option>
@@ -644,7 +644,7 @@ export default function CatalogoManager() {
                                 <div className="flex gap-2 mt-1">
                                     <button 
                                         type="submit"
-                                        className="flex-1 py-2 bg-[#C08A89] hover:bg-[#b07978] text-white font-bold text-xs rounded-xl shadow-sm transition-all cursor-pointer flex justify-center items-center gap-1.5"
+                                        className="flex-1 py-2 bg-[#C5A059] hover:bg-[#b07978] text-white font-bold text-xs rounded-xl shadow-sm transition-all cursor-pointer flex justify-center items-center gap-1.5"
                                     >
                                         <Save className="w-3.5 h-3.5" />
                                         <span>Salvar Categoria</span>

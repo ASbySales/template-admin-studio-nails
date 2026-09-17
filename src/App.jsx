@@ -1,43 +1,26 @@
 import { useState, useEffect } from 'react'
-import { Routes, Route, Navigate } from 'react-router-dom'
-import { supabase } from './lib/supabase'
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import Login from './paginas/Login'
 import Dashboard from './paginas/Dashboard'
 import CatalogoManager from './paginas/CatalogoManager'
 import './App.css'
 
 function App() {
-  const [usuario, setUsuario] = useState(null)
-  const [loading, setLoading] = useState(true)
+  const [autenticado, setAutenticado] = useState(() => {
+    return localStorage.getItem('admin_demo_auth') === 'true'
+  })
+  const location = useLocation()
 
+  // Atualiza o estado de autenticação sempre que a rota mudar
   useEffect(() => {
-    // 1. Verifica se há uma sessão de usuário ativa
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUsuario(session?.user || null)
-      setLoading(false)
-    })
+    setAutenticado(localStorage.getItem('admin_demo_auth') === 'true')
+  }, [location])
 
-    // 2. Ouve alterações de autenticação em tempo real
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUsuario(session?.user || null)
-      setLoading(false)
-    })
-
-    return () => subscription.unsubscribe()
-  }, [])
-
-  // Componente de Rota Protegida
+  // Componente de Rota Protegida (Modo Demonstração Desanexado)
   const RotaProtegida = ({ children }) => {
-    if (loading) {
-      return (
-        <div className="min-h-screen w-full flex flex-col items-center justify-center bg-gray-50 gap-3">
-          <div className="w-10 h-10 border-4 border-[#C08A89]/20 border-t-[#C08A89] rounded-full animate-spin"></div>
-          <p className="text-sm text-gray-400 font-semibold font-cinzel">Verificando permissões...</p>
-        </div>
-      )
-    }
-
-    if (!usuario) {
+    const isAuth = localStorage.getItem('admin_demo_auth') === 'true'
+    
+    if (!isAuth) {
       return <Navigate to="/login" replace />
     }
 

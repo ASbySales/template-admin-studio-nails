@@ -16,7 +16,7 @@ import {
     User,
     Package
 } from 'lucide-react'
-import JKStudioNailsOnlyLogo from '../assets/JKStudioNailsOnlyLogo.png'
+import AlbertSalesLogo from '../assets/AlbertSalesLogo.png'
 
 export default function Dashboard() {
     const [solicitacoes, setSolicitacoes] = useState([])
@@ -33,6 +33,11 @@ export default function Dashboard() {
     
     const audioRef = useRef(null)
     const navigate = useNavigate()
+
+    const deslogarAdmin = () => {
+        localStorage.removeItem('admin_demo_auth')
+        navigate('/login')
+    }
 
     // Som de notificação em formato Base64 para ser 100% autônomo e não falhar
     const soundUrl = "https://assets.mixkit.co/active_storage/sfx/2869/2869-84.wav"
@@ -368,7 +373,7 @@ export default function Dashboard() {
             
             {/* Toast de Notificação flutuante */}
             {toastMessage && (
-                <div className="fixed top-4 right-4 z-50 bg-[#C08A89] text-white px-4 py-2.5 rounded-2xl shadow-xl font-semibold flex items-center gap-2 border border-white/20 animate-bounce text-xs">
+                <div className="fixed top-4 right-4 z-50 bg-[#C5A059] text-white px-4 py-2.5 rounded-2xl shadow-xl font-semibold flex items-center gap-2 border border-white/20 animate-bounce text-xs">
                     <Sparkles className="w-4 h-4 animate-pulse" />
                     <span>{toastMessage}</span>
                 </div>
@@ -376,13 +381,13 @@ export default function Dashboard() {
 
             {/* Topbar Administrativo Compacto */}
             <header className="w-full bg-white border-b border-gray-100 px-4 py-3 flex justify-between items-center shadow-xs">
-                <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-full border-b border-[#D9A09E] bg-white shadow-sm overflow-hidden flex justify-center items-center">
-                        <img className="w-[90%] h-[90%] object-contain" src={JKStudioNailsOnlyLogo} />
+                <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-full border border-gray-200 bg-[#0F172A] shadow-sm overflow-hidden flex justify-center items-center">
+                        <img className="w-full h-full object-cover" src={AlbertSalesLogo} alt="Logo Albert Sales" />
                     </div>
                     <div className="text-left font-cinzel">
-                        <h1 className="text-xs font-bold text-gray-800 tracking-wider">JOYCE KAYANE</h1>
-                        <span className="text-[9px] block font-sans font-semibold text-gray-400 leading-none">PAINEL ADMINISTRATIVO</span>
+                        <h1 className="text-xs font-bold text-gray-900 tracking-wider">ALBERT SALES</h1>
+                        <span className="text-[9px] block font-sans font-bold text-amber-700 leading-none">PAINEL ADMINISTRATIVO (MODELO)</span>
                     </div>
                 </div>
 
@@ -395,7 +400,7 @@ export default function Dashboard() {
                         <Package className="w-4 h-4" />
                     </button>
                     <button 
-                        onClick={handleLogOut}
+                        onClick={deslogarAdmin}
                         className="flex items-center justify-center text-red-500 bg-red-50 hover:bg-red-100 p-2 rounded-xl transition-all cursor-pointer"
                         title="Sair"
                     >
@@ -416,7 +421,7 @@ export default function Dashboard() {
                             placeholder="Buscar cliente, telefone ou serviço..."
                             value={pesquisa}
                             onChange={(e) => setPesquisa(e.target.value)}
-                            className="w-full pl-8 pr-4 py-1.5 border border-gray-200 rounded-xl focus:outline-none focus:border-[#C08A89] text-xs"
+                            className="w-full pl-8 pr-4 py-1.5 border border-gray-200 rounded-xl focus:outline-none focus:border-[#C5A059] text-xs"
                         />
                     </div>
                     <div className="flex items-center justify-between text-[9px] font-semibold text-gray-400 px-1">
@@ -431,12 +436,12 @@ export default function Dashboard() {
                 {/* Fila de Cards de Agendamento */}
                 {loading ? (
                     <div className="flex-1 flex flex-col items-center justify-center py-20 gap-2">
-                        <div className="w-8 h-8 border-3 border-[#C08A89]/20 border-t-[#C08A89] rounded-full animate-spin"></div>
+                        <div className="w-8 h-8 border-3 border-[#C5A059]/20 border-t-[#C5A059] rounded-full animate-spin"></div>
                         <p className="text-xs text-gray-400 font-semibold font-cinzel">Carregando agendamentos...</p>
                     </div>
                 ) : solicitacoesFiltradas.length === 0 ? (
                     <div className="bg-white rounded-3xl p-8 flex flex-col items-center justify-center text-center border border-gray-100 shadow-sm gap-2">
-                        <Calendar className="w-10 h-10 text-[#C08A89]/30" />
+                        <Calendar className="w-10 h-10 text-[#C5A059]/30" />
                         <p className="font-semibold text-xs text-gray-500">Nenhum agendamento encontrado</p>
                         <p className="text-[10px] text-gray-400">As novas solicitações enviadas pelas clientes aparecerão aqui em tempo real.</p>
                     </div>
@@ -469,9 +474,9 @@ export default function Dashboard() {
                                         href={`https://wa.me/55${sol.whatsapp_cliente.replace(/\D/g, '')}`} 
                                         target="_blank" 
                                         rel="noopener noreferrer"
-                                        className="flex items-center gap-1.5 text-[11px] text-[#C08A89] hover:underline font-semibold w-max"
+                                        className="flex items-center gap-1.5 text-[11px] text-[#C5A059] hover:underline font-semibold w-max"
                                     >
-                                        <Phone className="w-3 h-3 text-[#C08A89]/70" />
+                                        <Phone className="w-3 h-3 text-[#C5A059]/70" />
                                         <span>{sol.whatsapp_cliente}</span>
                                     </a>
                                 </div>
@@ -513,7 +518,7 @@ export default function Dashboard() {
                                 <div className="flex justify-between items-center">
                                     <div className="flex flex-col text-left">
                                         <span className="text-[9px] text-gray-400 font-bold uppercase tracking-wider leading-none">Subtotal</span>
-                                        <span className="text-sm font-bold text-[#C08A89] mt-0.5">R$ {exibirValorTotal(sol).toFixed(2).replace('.', ',')}</span>
+                                        <span className="text-sm font-bold text-[#C5A059] mt-0.5">R$ {exibirValorTotal(sol).toFixed(2).replace('.', ',')}</span>
                                     </div>
                                     <span className={`text-[9px] font-bold rounded-full px-2.5 py-0.5 uppercase tracking-wider ${
                                         sol.status === 'aprovado' ? 'bg-green-50 text-green-700 border border-green-200' :
@@ -612,7 +617,7 @@ export default function Dashboard() {
                                     type="text" 
                                     value={editNome}
                                     onChange={(e) => setEditNome(e.target.value)}
-                                    className="w-full px-3 py-1.5 text-xs border border-gray-200 rounded-xl focus:outline-none focus:border-[#C08A89]"
+                                    className="w-full px-3 py-1.5 text-xs border border-gray-200 rounded-xl focus:outline-none focus:border-[#C5A059]"
                                 />
                             </div>
 
@@ -622,7 +627,7 @@ export default function Dashboard() {
                                     type="text" 
                                     value={editWhatsapp}
                                     onChange={(e) => setEditWhatsapp(handleWhatsappMask(e.target.value))}
-                                    className="w-full px-3 py-1.5 text-xs border border-gray-200 rounded-xl focus:outline-none focus:border-[#C08A89]"
+                                    className="w-full px-3 py-1.5 text-xs border border-gray-200 rounded-xl focus:outline-none focus:border-[#C5A059]"
                                 />
                             </div>
 
@@ -676,7 +681,7 @@ export default function Dashboard() {
                         <div className="pt-2.5 border-t border-gray-100 flex flex-col gap-2">
                             <button 
                                 onClick={handleSaveEdits}
-                                className="w-full py-2 bg-[#C08A89] text-white font-bold text-xs rounded-xl shadow-sm hover:scale-[1.01] active:scale-95 transition-all cursor-pointer"
+                                className="w-full py-2 bg-[#C5A059] text-white font-bold text-xs rounded-xl shadow-sm hover:scale-[1.01] active:scale-95 transition-all cursor-pointer"
                             >
                                 Salvar Alterações
                             </button>
