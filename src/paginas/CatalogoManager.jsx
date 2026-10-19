@@ -47,10 +47,12 @@ export default function CatalogoManager() {
     const fetchDados = async () => {
         try {
             setLoading(true)
+            const tenantId = import.meta.env.VITE_TENANT_ID || 'demo'
             
             const { data: catData, error: errCat } = await supabase
                 .from('categorias')
                 .select('*')
+                .eq('tenant_id', tenantId)
                 .order('id', { ascending: true })
             
             if (errCat) throw errCat
@@ -59,6 +61,7 @@ export default function CatalogoManager() {
             const { data: servData, error: errServ } = await supabase
                 .from('servicos')
                 .select('*')
+                .eq('tenant_id', tenantId)
 
             if (errServ) throw errServ
             setServicos(servData || [])
@@ -87,18 +90,19 @@ export default function CatalogoManager() {
             setUploading(true)
             showToast('Fazendo upload da imagem...')
 
+            const tenantId = import.meta.env.VITE_TENANT_ID || 'demo'
             const fileExt = file.name.split('.').pop()
             const fileName = `${Date.now()}.${fileExt}`
-            const filePath = `${fileName}`
+            const filePath = `${tenantId}/${fileName}`
 
             const { error: uploadError } = await supabase.storage
-                .from('JK-StudioNails')
+                .from('stores-media')
                 .upload(filePath, file)
 
             if (uploadError) throw uploadError
 
             const { data } = supabase.storage
-                .from('JK-StudioNails')
+                .from('stores-media')
                 .getPublicUrl(filePath)
 
             if (data && data.publicUrl) {
@@ -155,7 +159,9 @@ export default function CatalogoManager() {
             return
         }
 
+        const tenantId = import.meta.env.VITE_TENANT_ID || 'demo'
         const dadosServico = {
+            tenant_id: tenantId,
             nome: formNome.trim(),
             descricao: formDescricao.trim(),
             valor: valorFormatado,
@@ -218,7 +224,9 @@ export default function CatalogoManager() {
             return
         }
 
+        const tenantId = import.meta.env.VITE_TENANT_ID || 'demo'
         const dadosCat = {
+            tenant_id: tenantId,
             nome: catNome.trim(),
             escolha: catEscolha
         }

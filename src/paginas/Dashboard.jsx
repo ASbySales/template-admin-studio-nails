@@ -76,13 +76,16 @@ export default function Dashboard() {
 
     const fetchDados = async () => {
         try {
+            const tenantId = import.meta.env.VITE_TENANT_ID || 'demo'
+
             // Busca serviços para cruzar nomes e valores
             const { data: servicosData, error: errServ } = await supabase
                 .from('servicos')
                 .select('*')
+                .eq('tenant_id', tenantId)
             
             if (errServ) throw errServ
-            setServicos(servicosData)
+            setServicos(servicosData || [])
 
             // Busca solicitações com seus respectivos itens aninhados
             const { data: solicitacoesData, error: errSol } = await supabase
@@ -96,6 +99,7 @@ export default function Dashboard() {
                         quantidade
                     )
                 `)
+                .eq('tenant_id', tenantId)
                 .order('created_at', { ascending: false })
 
             if (errSol) throw errSol
