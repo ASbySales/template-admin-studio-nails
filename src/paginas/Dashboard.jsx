@@ -26,6 +26,13 @@ export default function Dashboard() {
     const [editingSolicitacao, setEditingSolicitacao] = useState(null)
     const [toastMessage, setToastMessage] = useState('')
     
+    // Estados do Estabelecimento Multi-Tenant
+    const [activeTenantId, setActiveTenantId] = useState(() => {
+        return localStorage.getItem('as_active_tenant') || import.meta.env.VITE_TENANT_ID || 'demo'
+    })
+    const [tenantInfo, setTenantInfo] = useState(null)
+    const [tenantsDisponiveis, setTenantsDisponiveis] = useState([])
+    
     // Estados do Formulário de Edição no Modal
     const [editNome, setEditNome] = useState('')
     const [editWhatsapp, setEditWhatsapp] = useState('')
@@ -36,7 +43,16 @@ export default function Dashboard() {
 
     const deslogarAdmin = () => {
         localStorage.removeItem('admin_demo_auth')
+        localStorage.removeItem('as_active_tenant')
+        localStorage.removeItem('as_auth_user')
         navigate('/login')
+    }
+
+    const trocarTenant = (novoTenantId) => {
+        setActiveTenantId(novoTenantId)
+        localStorage.setItem('as_active_tenant', novoTenantId)
+        fetchDados(novoTenantId)
+        showToast(`Ambiente alterado para: ${novoTenantId}`)
     }
 
     // Som de notificação em formato Base64 para ser 100% autônomo e não falhar
@@ -74,20 +90,40 @@ export default function Dashboard() {
         }
     }, [])
 
-    const fetchDados = async () => {
+    const fetchDados = async (tId = null) => {
         try {
-            const tenantId = import.meta.env.VITE_TENANT_ID || 'demo'
+            const currentTenant = tId || localStorage.getItem('as_active_tenant') || import.meta.env.VITE_TENANT_ID || 'demo'
 
-            // Busca serviços para cruzar nomes e valores
+            // 1. Busca dados do tenant ativo
+            const { data: tData } = await supabase
+                .from('tenants')
+                .select('*')
+                .eq('id', currentTenant)
+                .single()
+
+            if (tData) {
+                setTenantInfo(tData)
+                document.title = `${tData.nome} • Painel AS Gestão`
+            }
+
+            // 2. Busca lista de todos os tenants cadastrados para o alternador
+            const { data: allTenants } = await supabase
+                .from('tenants')
+                .select('id, nome, segmento, cor_primaria')
+            if (allTenants && allTenants.length > 0) {
+                setTenantsDisponiveis(allTenants)
+            }
+
+            // 3. Busca serviços para cruzar nomes e valores
             const { data: servicosData, error: errServ } = await supabase
                 .from('servicos')
                 .select('*')
-                .eq('tenant_id', tenantId)
+                .eq('tenant_id', currentTenant)
             
             if (errServ) throw errServ
             setServicos(servicosData || [])
 
-            // Busca solicitações com seus respectivos itens aninhados
+            // 4. Busca solicitações com seus respectivos itens aninhados
             const { data: solicitacoesData, error: errSol } = await supabase
                 .from('solicitacoes_agendamento')
                 .select(`
@@ -99,7 +135,7 @@ export default function Dashboard() {
                         quantidade
                     )
                 `)
-                .eq('tenant_id', tenantId)
+                .eq('tenant_id', currentTenant)
                 .order('created_at', { ascending: false })
 
             if (errSol) throw errSol
@@ -383,30 +419,53 @@ export default function Dashboard() {
                 </div>
             )}
 
-            {/* Topbar Administrativo Compacto */}
+            {/* Topbar Administrativo Profissional */}
             <header className="w-full bg-white border-b border-gray-100 px-4 py-3 flex justify-between items-center shadow-xs">
                 <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-full border border-gray-200 bg-[#0F172A] shadow-sm overflow-hidden flex justify-center items-center">
-                        <img className="w-full h-full object-cover" src={AlbertSalesLogo} alt="Logo Albert Sales" />
+                    <div className="w-8 h-8 rounded-xl border border-[#C5A059]/40 bg-[#0F172A] shadow-xs overflow-hidden flex justify-center items-center">
+                        <img className="w-full h-full object-cover" src={AlbertSalesLogo} alt="Logo AS Gestão" />
                     </div>
                     <div className="text-left font-cinzel">
-                        <h1 className="text-xs font-bold text-gray-900 tracking-wider">ALBERT SALES</h1>
-                        <span className="text-[9px] block font-sans font-bold text-amber-700 leading-none">PAINEL ADMINISTRATIVO (MODELO)</span>
+                        <h1 className="text-xs font-bold text-gray-900 tracking-wider">AS GESTÃO</h1>
+                        <span className="text-[9px] block font-sans font-bold text-gray-400 leading-none">PAINEL DE AGENDAMENTOS</span>
                     </div>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 sm:gap-3">
+                    {/* Alternador de Estabelecimento (Multi-Tenant) */}
+                    {tenantsDisponiveis.length > 1 ? (
+                        <div className="relative">
+                            <select
+                                value={activeTenantId}
+                                onChange={(e) => trocarTenant(e.target.value)}
+                                className="bg-gray-50 border border-gray-200 text-gray-800 text-xs font-bold py-1.5 px-3 rounded-xl focus:outline-none focus:border-[#C5A059] cursor-pointer"
+                            >
+                                {tenantsDisponiveis.map(t => (
+                                    <option key={t.id} value={t.id}>
+                                        {t.segmento === 'nail_design' ? '💅' : '🌸'} {t.nome}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                    ) : (
+                        <div className="bg-[#C5A059]/10 border border-[#C5A059]/30 text-[#C5A059] px-3 py-1 rounded-xl text-xs font-bold flex items-center gap-1.5">
+                            <span>{tenantInfo?.segmento === 'nail_design' ? '💅' : '🌸'}</span>
+                            <span className="max-w-[120px] sm:max-w-none truncate">{tenantInfo?.nome || 'Estabelecimento Ativo'}</span>
+                        </div>
+                    )}
+
                     <button 
                         onClick={() => navigate('/servicos')}
-                        className="flex items-center justify-center text-gray-600 bg-gray-100 hover:bg-gray-200 p-2 rounded-xl transition-all cursor-pointer"
+                        className="flex items-center gap-1.5 text-xs font-bold text-gray-700 bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-xl transition-all cursor-pointer"
                         title="Gerenciar Catálogo"
                     >
-                        <Package className="w-4 h-4" />
+                        <Package className="w-4 h-4 text-[#C5A059]" />
+                        <span className="hidden sm:inline">Catálogo</span>
                     </button>
                     <button 
                         onClick={deslogarAdmin}
                         className="flex items-center justify-center text-red-500 bg-red-50 hover:bg-red-100 p-2 rounded-xl transition-all cursor-pointer"
-                        title="Sair"
+                        title="Sair do Painel"
                     >
                         <LogOut className="w-4 h-4" />
                     </button>

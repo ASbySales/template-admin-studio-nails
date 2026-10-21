@@ -1,7 +1,7 @@
-# 📊 Studio Nails — Painel Administrativo & Gestão (Admin)
+# 📊 AS Gestão — Painel Central de Controle Multi-Tenant (Admin)
 
-> **Painel de Controle e Gestão Comercial desenvolvido por [Albert Sales & Development](https://asnamanga.vercel.app/).**  
-> Aplicação web completa e intuitiva para Nail Designers e gestores administrarem solicitações de agendamento, catálogo de serviços, categorias e métricas financeiras em tempo real.
+> **Plataforma Central de Gestão Comercial e Backoffice desenvolvida por [ASbySales / Albert Sales](https://asales.online/).**  
+> Aplicação web unificada para múltiplos estabelecimentos (salões, floriculturas e comércios) administrarem solicitações de pedidos/agendamentos, catálogo de produtos e serviços, categorias e métricas em tempo real.
 
 ---
 

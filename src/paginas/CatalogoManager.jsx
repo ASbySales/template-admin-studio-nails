@@ -38,6 +38,7 @@ export default function CatalogoManager() {
     const [catNome, setCatNome] = useState('')
     const [catEscolha, setCatEscolha] = useState(true)
 
+    const [tenantInfo, setTenantInfo] = useState(null)
     const navigate = useNavigate()
 
     useEffect(() => {
@@ -47,8 +48,20 @@ export default function CatalogoManager() {
     const fetchDados = async () => {
         try {
             setLoading(true)
-            const tenantId = import.meta.env.VITE_TENANT_ID || 'demo'
+            const tenantId = localStorage.getItem('as_active_tenant') || import.meta.env.VITE_TENANT_ID || 'demo'
             
+            // Busca dados do tenant ativo
+            const { data: tData } = await supabase
+                .from('tenants')
+                .select('*')
+                .eq('id', tenantId)
+                .single()
+
+            if (tData) {
+                setTenantInfo(tData)
+                document.title = `${tData.nome} • Gerenciar Catálogo`
+            }
+
             const { data: catData, error: errCat } = await supabase
                 .from('categorias')
                 .select('*')
@@ -90,7 +103,7 @@ export default function CatalogoManager() {
             setUploading(true)
             showToast('Fazendo upload da imagem...')
 
-            const tenantId = import.meta.env.VITE_TENANT_ID || 'demo'
+            const tenantId = localStorage.getItem('as_active_tenant') || import.meta.env.VITE_TENANT_ID || 'demo'
             const fileExt = file.name.split('.').pop()
             const fileName = `${Date.now()}.${fileExt}`
             const filePath = `${tenantId}/${fileName}`
@@ -159,7 +172,7 @@ export default function CatalogoManager() {
             return
         }
 
-        const tenantId = import.meta.env.VITE_TENANT_ID || 'demo'
+        const tenantId = localStorage.getItem('as_active_tenant') || import.meta.env.VITE_TENANT_ID || 'demo'
         const dadosServico = {
             tenant_id: tenantId,
             nome: formNome.trim(),
@@ -224,7 +237,7 @@ export default function CatalogoManager() {
             return
         }
 
-        const tenantId = import.meta.env.VITE_TENANT_ID || 'demo'
+        const tenantId = localStorage.getItem('as_active_tenant') || import.meta.env.VITE_TENANT_ID || 'demo'
         const dadosCat = {
             tenant_id: tenantId,
             nome: catNome.trim(),
@@ -300,8 +313,10 @@ export default function CatalogoManager() {
                         <ArrowLeft className="w-4 h-4" />
                     </button>
                     <div className="text-left">
-                        <h1 className="text-md font-cinzel font-bold text-gray-900 tracking-wider">ALBERT SALES</h1>
-                        <span className="text-[10px] block font-sans font-bold text-amber-700">GERENCIAR CATÁLOGO (MODELO)</span>
+                        <h1 className="text-md font-cinzel font-bold text-gray-900 tracking-wider">AS GESTÃO</h1>
+                        <span className="text-[10px] block font-sans font-bold text-[#C5A059]">
+                            {tenantInfo?.segmento === 'nail_design' ? '💅' : '🌸'} CATÁLOGO & PRODUTOS • {tenantInfo?.nome || 'Estabelecimento Ativo'}
+                        </span>
                     </div>
                 </div>
 
