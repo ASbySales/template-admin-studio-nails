@@ -41,7 +41,12 @@ export default function Dashboard() {
     const audioRef = useRef(null)
     const navigate = useNavigate()
 
-    const deslogarAdmin = () => {
+    const deslogarAdmin = async () => {
+        try {
+            await supabase.auth.signOut()
+        } catch (err) {
+            console.error('Erro ao encerrar sessão Supabase:', err)
+        }
         localStorage.removeItem('admin_demo_auth')
         localStorage.removeItem('as_active_tenant')
         localStorage.removeItem('as_auth_user')

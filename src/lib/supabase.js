@@ -39,8 +39,8 @@ export const supabase = createClient(
   supabaseAnonKey || 'placeholder',
   {
     auth: {
-      persistSession: false,
-      autoRefreshToken: false
+      persistSession: true,
+      autoRefreshToken: true
     },
     global: isLocalOrTunnel ? { fetch: customFetch } : {}
   }

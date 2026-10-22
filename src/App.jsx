@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import { supabase } from './lib/supabase'
 import Login from './paginas/Login'
 import Dashboard from './paginas/Dashboard'
 import CatalogoManager from './paginas/CatalogoManager'
@@ -11,14 +12,43 @@ function App() {
   })
   const location = useLocation()
 
-  // Atualiza o estado de autenticação sempre que a rota mudar
+  useEffect(() => {
+    // 1. Verifica sessão nativa existente
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        setAutenticado(true)
+        localStorage.setItem('admin_demo_auth', 'true')
+        const tenantId = session.user.user_metadata?.tenant_id
+        if (tenantId) localStorage.setItem('as_active_tenant', tenantId)
+      }
+    })
+
+    // 2. Escuta eventos de login/logout em tempo real
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (session?.user) {
+        setAutenticado(true)
+        localStorage.setItem('admin_demo_auth', 'true')
+        const tenantId = session.user.user_metadata?.tenant_id
+        if (tenantId) localStorage.setItem('as_active_tenant', tenantId)
+      } else if (event === 'SIGNED_OUT') {
+        setAutenticado(false)
+        localStorage.removeItem('as_active_tenant')
+        localStorage.removeItem('as_auth_user')
+        localStorage.removeItem('admin_demo_auth')
+      }
+    })
+
+    return () => subscription.unsubscribe()
+  }, [])
+
+  // Sincroniza estado com location
   useEffect(() => {
     setAutenticado(localStorage.getItem('admin_demo_auth') === 'true')
   }, [location])
 
-  // Componente de Rota Protegida (Modo Demonstração Desanexado)
+  // Componente de Rota Protegida
   const RotaProtegida = ({ children }) => {
-    const isAuth = localStorage.getItem('admin_demo_auth') === 'true'
+    const isAuth = autenticado || localStorage.getItem('admin_demo_auth') === 'true'
     
     if (!isAuth) {
       return <Navigate to="/login" replace />

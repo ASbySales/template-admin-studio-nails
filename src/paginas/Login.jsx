@@ -2,12 +2,13 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import AlbertSalesLogo from '../assets/AlbertSalesLogo.png'
-import { ShieldCheck, Lock, Mail, Store, ArrowRight, Eye, EyeOff, Sparkles } from 'lucide-react'
+import { ShieldCheck, Lock, Mail, Store, ArrowRight, Eye, EyeOff, Sparkles, AlertCircle } from 'lucide-react'
 
 export default function Login() {
-    const [email, setEmail] = useState('contato@asales.online')
-    const [password, setPassword] = useState('••••••••')
+    const [email, setEmail] = useState('')
+    const [password, setPassword] = useState('')
     const [mostrarSenha, setMostrarSenha] = useState(false)
+    const [erroLogin, setErroLogin] = useState('')
     const [selectedTenantId, setSelectedTenantId] = useState('demo')
     const [tenants, setTenants] = useState([
         { id: 'demo', nome: 'Studio Nails Demo', segmento: 'nail_design', cor_primaria: '#C5A059' },
@@ -40,24 +41,73 @@ export default function Login() {
         carregarTenants()
     }, [])
 
-    const handleLogin = (e) => {
+    const handleLogin = async (e) => {
         if (e) e.preventDefault()
+        setErroLogin('')
+
+        if (!email.trim() || !password) {
+            setErroLogin('Por favor, informe seu e-mail e senha de acesso.')
+            return
+        }
+
         setCarregando(true)
 
-        const tenantSelecionado = tenants.find(t => t.id === selectedTenantId) || tenants[0]
+        try {
+            // 1. Tenta autenticação nativa oficial no Supabase Auth
+            const { data, error } = await supabase.auth.signInWithPassword({
+                email: email.trim(),
+                password: password
+            })
 
-        // Salva a sessão do estabelecimento selecionado
-        localStorage.setItem('as_active_tenant', tenantSelecionado.id)
-        localStorage.setItem('as_auth_user', JSON.stringify({
-            email,
-            tenant_id: tenantSelecionado.id,
-            tenant_nome: tenantSelecionado.nome
-        }))
-        localStorage.setItem('admin_demo_auth', 'true') // Mantém retrocompatibilidade de rota
+            if (error) {
+                throw error
+            }
 
-        setTimeout(() => {
-            navigate('/')
-        }, 300)
+            if (data?.user) {
+                // Autenticado com sucesso no cofre Supabase!
+                const metadataTenant = data.user.user_metadata?.tenant_id
+                const tenantFinal = metadataTenant || selectedTenantId || 'demo'
+
+                localStorage.setItem('as_active_tenant', tenantFinal)
+                localStorage.setItem('as_auth_user', JSON.stringify({
+                    id: data.user.id,
+                    email: data.user.email,
+                    tenant_id: tenantFinal,
+                    tenant_nome: data.user.user_metadata?.nome || tenantFinal
+                }))
+                localStorage.setItem('admin_demo_auth', 'true')
+
+                navigate('/')
+                return
+            }
+        } catch (err) {
+            console.error('Erro na autenticação nativa Supabase:', err)
+
+            // Fallback de teste para conta de demonstração (se ainda não cadastrada no Auth)
+            if (email === 'demo@asales.online' && password === '123456') {
+                const tenantSelecionado = tenants.find(t => t.id === selectedTenantId) || tenants[0]
+                localStorage.setItem('as_active_tenant', tenantSelecionado.id)
+                localStorage.setItem('as_auth_user', JSON.stringify({
+                    email,
+                    tenant_id: tenantSelecionado.id,
+                    tenant_nome: tenantSelecionado.nome
+                }))
+                localStorage.setItem('admin_demo_auth', 'true')
+                navigate('/')
+                return
+            }
+
+            // Mensagens amigáveis em português
+            if (err.message?.includes('Invalid login credentials')) {
+                setErroLogin('E-mail ou senha incorretos.')
+            } else if (err.message?.includes('Email not confirmed')) {
+                setErroLogin('E-mail cadastrado, mas ainda não confirmado no Supabase.')
+            } else {
+                setErroLogin(err.message || 'Erro ao realizar login no Supabase.')
+            }
+        } finally {
+            setCarregando(false)
+        }
     }
 
     const tenantAtivo = tenants.find(t => t.id === selectedTenantId) || tenants[0]
@@ -129,6 +179,12 @@ export default function Login() {
 
                 {/* Formulário de Acesso */}
                 <form onSubmit={handleLogin} className="w-full flex flex-col gap-4 text-left">
+                    {erroLogin && (
+                        <div className="w-full bg-red-50 border border-red-200 text-red-600 text-xs rounded-xl p-3 flex items-start gap-2 animate-shake">
+                            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                            <span>{erroLogin}</span>
+                        </div>
+                    )}
                     <div className="flex flex-col gap-1">
                         <label className="text-xs font-bold text-gray-700 flex items-center gap-1.5">
                             <Mail className="w-3.5 h-3.5 text-gray-400" />
