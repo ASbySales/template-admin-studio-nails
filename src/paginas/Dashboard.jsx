@@ -26,12 +26,11 @@ export default function Dashboard() {
     const [editingSolicitacao, setEditingSolicitacao] = useState(null)
     const [toastMessage, setToastMessage] = useState('')
     
-    // Estados do Estabelecimento Multi-Tenant
+    // Estados do Estabelecimento
     const [activeTenantId, setActiveTenantId] = useState(() => {
         return localStorage.getItem('as_active_tenant') || import.meta.env.VITE_TENANT_ID || 'demo'
     })
     const [tenantInfo, setTenantInfo] = useState(null)
-    const [tenantsDisponiveis, setTenantsDisponiveis] = useState([])
     
     // Estados do Formulário de Edição no Modal
     const [editNome, setEditNome] = useState('')
@@ -51,13 +50,6 @@ export default function Dashboard() {
         localStorage.removeItem('as_active_tenant')
         localStorage.removeItem('as_auth_user')
         navigate('/login')
-    }
-
-    const trocarTenant = (novoTenantId) => {
-        setActiveTenantId(novoTenantId)
-        localStorage.setItem('as_active_tenant', novoTenantId)
-        fetchDados(novoTenantId)
-        showToast(`Ambiente alterado para: ${novoTenantId}`)
     }
 
     // Som de notificação em formato Base64 para ser 100% autônomo e não falhar
@@ -111,13 +103,6 @@ export default function Dashboard() {
                 document.title = `${tData.nome} • Painel AS Gestão`
             }
 
-            // 2. Busca lista de todos os tenants cadastrados para o alternador
-            const { data: allTenants } = await supabase
-                .from('tenants')
-                .select('id, nome, segmento, cor_primaria')
-            if (allTenants && allTenants.length > 0) {
-                setTenantsDisponiveis(allTenants)
-            }
 
             // 3. Busca serviços para cruzar nomes e valores
             const { data: servicosData, error: errServ } = await supabase
@@ -435,29 +420,12 @@ export default function Dashboard() {
                         <span className="text-[9px] block font-sans font-bold text-gray-400 leading-none">PAINEL DE AGENDAMENTOS</span>
                     </div>
                 </div>
-
                 <div className="flex items-center gap-2 sm:gap-3">
-                    {/* Alternador de Estabelecimento (Multi-Tenant) */}
-                    {tenantsDisponiveis.length > 1 ? (
-                        <div className="relative">
-                            <select
-                                value={activeTenantId}
-                                onChange={(e) => trocarTenant(e.target.value)}
-                                className="bg-gray-50 border border-gray-200 text-gray-800 text-xs font-bold py-1.5 px-3 rounded-xl focus:outline-none focus:border-[#C5A059] cursor-pointer"
-                            >
-                                {tenantsDisponiveis.map(t => (
-                                    <option key={t.id} value={t.id}>
-                                        {t.segmento === 'nail_design' ? '💅' : '🌸'} {t.nome}
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
-                    ) : (
-                        <div className="bg-[#C5A059]/10 border border-[#C5A059]/30 text-[#C5A059] px-3 py-1 rounded-xl text-xs font-bold flex items-center gap-1.5">
-                            <span>{tenantInfo?.segmento === 'nail_design' ? '💅' : '🌸'}</span>
-                            <span className="max-w-[120px] sm:max-w-none truncate">{tenantInfo?.nome || 'Estabelecimento Ativo'}</span>
-                        </div>
-                    )}
+                    {/* Badge Fixo do Estabelecimento Vinculado ao Usuário */}
+                    <div className="bg-[#C5A059]/10 border border-[#C5A059]/30 text-[#C5A059] px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5">
+                        <span>{tenantInfo?.segmento === 'nail_design' ? '💅' : '🌸'}</span>
+                        <span className="max-w-[130px] sm:max-w-none truncate">{tenantInfo?.nome || 'Estabelecimento Ativo'}</span>
+                    </div>
 
                     <button 
                         onClick={() => navigate('/servicos')}
