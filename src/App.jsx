@@ -18,7 +18,7 @@ function App() {
       if (session?.user) {
         setAutenticado(true)
         localStorage.setItem('admin_demo_auth', 'true')
-        const tenantId = session.user.user_metadata?.tenant_id
+        const tenantId = session.user.app_metadata?.tenant_id || session.user.user_metadata?.tenant_id
         if (tenantId) localStorage.setItem('as_active_tenant', tenantId)
       }
     })
@@ -28,7 +28,7 @@ function App() {
       if (session?.user) {
         setAutenticado(true)
         localStorage.setItem('admin_demo_auth', 'true')
-        const tenantId = session.user.user_metadata?.tenant_id
+        const tenantId = session.user.app_metadata?.tenant_id || session.user.user_metadata?.tenant_id
         if (tenantId) localStorage.setItem('as_active_tenant', tenantId)
       } else if (event === 'SIGNED_OUT') {
         setAutenticado(false)

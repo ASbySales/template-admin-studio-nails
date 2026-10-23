@@ -36,9 +36,9 @@ export default function Login() {
 
             if (data?.user) {
                 // Autenticado com sucesso!
-                // O tenant_id vem amarrado diretamente no user_metadata do usuário
-                const tenantId = data.user.user_metadata?.tenant_id || 'demo'
-                const tenantNome = data.user.user_metadata?.nome || tenantId
+                // O tenant_id vem amarrado de forma segura no app_metadata do usuário
+                const tenantId = data.user.app_metadata?.tenant_id || data.user.user_metadata?.tenant_id || 'demo'
+                const tenantNome = data.user.app_metadata?.nome || data.user.user_metadata?.nome || tenantId
 
                 localStorage.setItem('as_active_tenant', tenantId)
                 localStorage.setItem('as_auth_user', JSON.stringify({
