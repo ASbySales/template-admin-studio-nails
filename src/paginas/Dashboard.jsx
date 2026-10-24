@@ -312,63 +312,34 @@ export default function Dashboard() {
         }))
     }
 
-    // Salva as alterações feitas no modal de volta para o Supabase
+    // Salva as alterações feitas no modal de volta para o Supabase via RPC segura
     const handleSaveEdits = async () => {
         try {
             setLoading(true)
-            
-            // 1. Atualiza Nome, Telefone e o valor_total recalculado!
-            const { error: errCabecalho } = await supabase
-                .from('solicitacoes_agendamento')
-                .update({
-                    nome_cliente: editNome.trim(),
-                    whatsapp_cliente: editWhatsapp,
-                    valor_total: calcularTotalEdicao()
-                })
-                .eq('id', editingSolicitacao.id)
 
-            if (errCabecalho) throw errCabecalho
+            const payloadItens = editItens.map(item => ({
+                servico_id: item.servico_id,
+                quantidade: 1,
+                opcionais: Object.entries(item.opcionais || {})
+                    .filter(([_, qtd]) => Number(qtd) > 0)
+                    .map(([opcId, qtd]) => ({
+                        servico_id: parseInt(opcId),
+                        quantidade: Number(qtd)
+                    }))
+            }))
 
-            // 2. Limpa os itens antigos da tabela e insere a nova lista atualizada
-            const { error: errLimpar } = await supabase
-                .from('itens_agendamento')
-                .delete()
-                .eq('solicitacao_id', editingSolicitacao.id)
+            const { error: errRpc } = await supabase.rpc('editar_solicitacao_lojista', {
+                p_solicitacao_id: editingSolicitacao.id,
+                p_nome_cliente: editNome.trim(),
+                p_whatsapp_cliente: editWhatsapp,
+                p_data_agendamento: editingSolicitacao.data_agendamento || null,
+                p_horario_agendamento: editingSolicitacao.horario_agendamento || null,
+                p_status: editingSolicitacao.status || 'pendente',
+                p_observacoes: editingSolicitacao.observacoes || null,
+                p_itens: payloadItens
+            })
 
-            if (errLimpar) throw errLimpar
-
-            // 3. Insere a lista atualizada
-            for (const item of editItens) {
-                const { data: itemPrincipal, error: errPrincipal } = await supabase
-                    .from('itens_agendamento')
-                    .insert({
-                        solicitacao_id: editingSolicitacao.id,
-                        servico_id: item.servico_id,
-                        parent_item_id: null,
-                        quantidade: 1
-                    })
-                    .select()
-                    .single()
-
-                if (errPrincipal) throw errPrincipal
-
-                const opcionaisParaInserir = Object.entries(item.opcionais).map(([opcId, qtd]) => ({
-                    solicitacao_id: editingSolicitacao.id,
-                    servico_id: parseInt(opcId),
-                    parent_item_id: itemPrincipal.id,
-                    quantidade: qtd
-                }))
-
-                if (opcionaisParaInserir.length > 0) {
-                    const { error: errOpc } = await supabase
-                        .from('itens_agendamento')
-                        .insert(opcionaisParaInserir)
-
-                    if (errOpc) throw errOpc
-                }
-            }
-
-            // A trigger no Supabase vai recalcular o valor_total automaticamente!
+            if (errRpc) throw errRpc
             
             setEditingSolicitacao(null)
             showToast('Agendamento editado com sucesso!')
