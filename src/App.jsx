@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { supabase } from './lib/supabase'
 import Login from './paginas/Login'
+import RedefinirSenha from './paginas/RedefinirSenha'
 import Dashboard from './paginas/Dashboard'
 import CatalogoManager from './paginas/CatalogoManager'
 import './App.css'
@@ -60,6 +61,7 @@ function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/redefinir-senha" element={<RedefinirSenha />} />
       <Route 
         path="/" 
         element={
