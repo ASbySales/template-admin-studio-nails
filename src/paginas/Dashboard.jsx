@@ -153,19 +153,46 @@ export default function Dashboard() {
         navigate('/login')
     }
 
-    // Altera o status do agendamento
+    // Altera o status do agendamento via RPC atômica
     const handleUpdateStatus = async (id, novoStatus) => {
         try {
-            const { error } = await supabase
-                .from('solicitacoes_agendamento')
-                .update({ status: novoStatus })
-                .eq('id', id)
+            const sol = solicitacoes.find(s => s.id === id)
+            if (!sol) return
+
+            // Monta os itens atuais da solicitação para manter a integridade na RPC
+            const itensPrincipais = (sol.itens_agendamento || []).filter(i => i.parent_item_id === null)
+            const payloadItens = itensPrincipais.map(itemPrincipal => {
+                const opcionais = (sol.itens_agendamento || [])
+                    .filter(i => i.parent_item_id === itemPrincipal.id)
+                    .map(opc => ({
+                        servico_id: opc.servico_id,
+                        quantidade: opc.quantidade || 1
+                    }))
+
+                return {
+                    servico_id: itemPrincipal.servico_id,
+                    quantidade: itemPrincipal.quantidade || 1,
+                    opcionais: opcionais
+                }
+            })
+
+            const { error } = await supabase.rpc('editar_solicitacao_lojista', {
+                p_solicitacao_id: id,
+                p_nome_cliente: sol.nome_cliente,
+                p_whatsapp_cliente: sol.whatsapp_cliente,
+                p_data_agendamento: sol.data_agendamento || null,
+                p_horario_agendamento: sol.horario_agendamento || null,
+                p_status: novoStatus,
+                p_observacoes: sol.observacoes || null,
+                p_itens: payloadItens
+            })
 
             if (error) throw error
             showToast(`Status atualizado para "${novoStatus}" com sucesso!`)
             fetchDados()
         } catch (error) {
             console.error('Erro ao atualizar status:', error)
+            showToast('Erro ao atualizar status.')
         }
     }
 
