@@ -86,8 +86,9 @@ export default function Login() {
         setEnviandoRecuperacao(true)
 
         try {
+            const redirectUrl = `${window.location.origin}/redefinir-senha`
             const { error } = await supabase.auth.resetPasswordForEmail(emailRecuperacao.trim(), {
-                redirectTo: 'https://adm.asales.online/redefinir-senha'
+                redirectTo: redirectUrl
             })
 
             if (error) throw error

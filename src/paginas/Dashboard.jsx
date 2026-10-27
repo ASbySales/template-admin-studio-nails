@@ -14,7 +14,8 @@ import {
     Sparkles, 
     Database, 
     User,
-    Package
+    Package,
+    Lock
 } from 'lucide-react'
 import AlbertSalesLogo from '../assets/AlbertSalesLogo.png'
 
@@ -432,6 +433,14 @@ export default function Dashboard() {
                     >
                         <Package className="w-4 h-4 text-[#C5A059]" />
                         <span className="hidden sm:inline">Catálogo</span>
+                    </button>
+                    <button 
+                        onClick={() => navigate('/redefinir-senha')}
+                        className="flex items-center gap-1.5 text-xs font-bold text-gray-700 bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-xl transition-all cursor-pointer"
+                        title="Alterar Senha da Conta"
+                    >
+                        <Lock className="w-4 h-4 text-[#C5A059]" />
+                        <span className="hidden sm:inline">Senha</span>
                     </button>
                     <button 
                         onClick={deslogarAdmin}

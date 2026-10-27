@@ -52,6 +52,10 @@ export default function RedefinirSenha() {
             if (error) throw error
 
             setSucesso(true)
+            await supabase.auth.signOut()
+            localStorage.removeItem('as_active_tenant')
+            localStorage.removeItem('as_auth_user')
+            localStorage.removeItem('admin_demo_auth')
             setTimeout(() => {
                 navigate('/login')
             }, 3000)
@@ -141,6 +145,14 @@ export default function RedefinirSenha() {
                         >
                             <span>{carregando ? 'Atualizando...' : 'Gravar Nova Senha'}</span>
                             <ArrowRight className="w-4 h-4" />
+                        </button>
+
+                        <button
+                            type="button"
+                            onClick={() => navigate('/')}
+                            className="w-full py-2 text-xs font-semibold text-gray-500 hover:text-gray-800 transition-colors text-center cursor-pointer -mt-1"
+                        >
+                            Voltar ao Painel
                         </button>
                     </form>
                 )}

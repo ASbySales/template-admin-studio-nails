@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from './lib/supabase'
 import Login from './paginas/Login'
 import RedefinirSenha from './paginas/RedefinirSenha'
@@ -12,8 +12,15 @@ function App() {
     return localStorage.getItem('admin_demo_auth') === 'true'
   })
   const location = useLocation()
+  const navigate = useNavigate()
 
   useEffect(() => {
+    // Se a URL contiver token de recuperação do Supabase, força navegação para /redefinir-senha
+    if (window.location.hash.includes('type=recovery') || window.location.href.includes('type=recovery')) {
+      navigate('/redefinir-senha')
+      return
+    }
+
     // 1. Verifica sessão nativa existente
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
@@ -26,6 +33,11 @@ function App() {
 
     // 2. Escuta eventos de login/logout em tempo real
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        navigate('/redefinir-senha')
+        return
+      }
+
       if (session?.user) {
         setAutenticado(true)
         localStorage.setItem('admin_demo_auth', 'true')
@@ -40,7 +52,7 @@ function App() {
     })
 
     return () => subscription.unsubscribe()
-  }, [])
+  }, [navigate])
 
   // Sincroniza estado com location
   useEffect(() => {
