@@ -32,6 +32,13 @@ export default function Dashboard() {
         return localStorage.getItem('as_active_tenant') || import.meta.env.VITE_TENANT_ID || 'demo'
     })
     const [tenantInfo, setTenantInfo] = useState(null)
+    const [userTenants, setUserTenants] = useState(() => {
+        try {
+            return JSON.parse(localStorage.getItem('as_user_tenants') || '[]')
+        } catch {
+            return []
+        }
+    })
     
     // Estados do Formulário de Edição no Modal
     const [editNome, setEditNome] = useState('')
@@ -88,9 +95,34 @@ export default function Dashboard() {
         }
     }, [])
 
+    const handleTrocarTenant = (novoTenantId) => {
+        setActiveTenantId(novoTenantId)
+        localStorage.setItem('as_active_tenant', novoTenantId)
+        fetchDados(novoTenantId)
+    }
+
     const fetchDados = async (tId = null) => {
         try {
-            const currentTenant = tId || localStorage.getItem('as_active_tenant') || import.meta.env.VITE_TENANT_ID || 'demo'
+            let currentTenant = tId || localStorage.getItem('as_active_tenant')
+
+            // Busca os vínculos confiáveis do usuário logado
+            const { data: vinculos } = await supabase
+                .from('tenants_usuarios')
+                .select('tenant_id, role, tenants(id, nome, segmento)')
+
+            if (vinculos && vinculos.length > 0) {
+                setUserTenants(vinculos)
+                localStorage.setItem('as_user_tenants', JSON.stringify(vinculos))
+                const valido = vinculos.some(v => v.tenant_id === currentTenant)
+                if (!valido) {
+                    currentTenant = vinculos[0].tenant_id
+                    localStorage.setItem('as_active_tenant', currentTenant)
+                }
+            } else if (!currentTenant) {
+                currentTenant = import.meta.env.VITE_TENANT_ID || 'demo'
+            }
+
+            setActiveTenantId(currentTenant)
 
             // 1. Busca dados do tenant ativo
             const { data: tData } = await supabase
@@ -420,11 +452,29 @@ export default function Dashboard() {
                     </div>
                 </div>
                 <div className="flex items-center gap-2 sm:gap-3">
-                    {/* Badge Fixo do Estabelecimento Vinculado ao Usuário */}
-                    <div className="bg-[#C5A059]/10 border border-[#C5A059]/30 text-[#C5A059] px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5">
-                        <span>{tenantInfo?.segmento === 'nail_design' ? '💅' : '🌸'}</span>
-                        <span className="max-w-[130px] sm:max-w-none truncate">{tenantInfo?.nome || 'Estabelecimento Ativo'}</span>
-                    </div>
+                    {/* Seletor ou Badge do Estabelecimento Vinculado */}
+                    {userTenants.length > 1 ? (
+                        <div className="bg-[#C5A059]/10 border border-[#C5A059]/30 rounded-xl px-2.5 py-1 flex items-center gap-1.5">
+                            <span className="text-xs">{tenantInfo?.segmento === 'nail_design' ? '💅' : '🌸'}</span>
+                            <select
+                                value={activeTenantId}
+                                onChange={(e) => handleTrocarTenant(e.target.value)}
+                                className="bg-transparent text-xs font-bold text-[#C5A059] focus:outline-none cursor-pointer max-w-[130px] sm:max-w-none"
+                                title="Alternar entre estabelecimentos autorizados"
+                            >
+                                {userTenants.map((v) => (
+                                    <option key={v.tenant_id} value={v.tenant_id} className="text-gray-800 bg-white">
+                                        {v.tenants?.nome || v.tenant_id}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                    ) : (
+                        <div className="bg-[#C5A059]/10 border border-[#C5A059]/30 text-[#C5A059] px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5">
+                            <span>{tenantInfo?.segmento === 'nail_design' ? '💅' : '🌸'}</span>
+                            <span className="max-w-[130px] sm:max-w-none truncate">{tenantInfo?.nome || 'Estabelecimento Ativo'}</span>
+                        </div>
+                    )}
 
                     <button 
                         onClick={() => navigate('/servicos')}

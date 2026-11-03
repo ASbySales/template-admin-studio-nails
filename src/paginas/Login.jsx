@@ -41,9 +41,27 @@ export default function Login() {
 
             if (data?.user) {
                 // Autenticado com sucesso!
-                // O tenant_id vem amarrado de forma segura no app_metadata do usuário
-                const tenantId = data.user.app_metadata?.tenant_id || data.user.user_metadata?.tenant_id || 'demo'
-                const tenantNome = data.user.app_metadata?.nome || data.user.user_metadata?.nome || tenantId
+                // Busca os vínculos oficiais do usuário na tabela tenants_usuarios
+                const { data: vinculos, error: vinculosErr } = await supabase
+                    .from('tenants_usuarios')
+                    .select('tenant_id, role, tenants(id, nome, segmento)')
+
+                let tenantId = 'demo'
+                let tenantNome = 'Estabelecimento'
+
+                if (vinculos && vinculos.length > 0) {
+                    // Armazena todos os tenants acessíveis pelo usuário
+                    localStorage.setItem('as_user_tenants', JSON.stringify(vinculos))
+                    
+                    // Se o usuário já tiver um tenant válido salvo no navegador, mantém; caso contrário, usa o primeiro vínculo
+                    const salvo = localStorage.getItem('as_active_tenant')
+                    const vinculoAtivo = vinculos.find(v => v.tenant_id === salvo) || vinculos[0]
+                    tenantId = vinculoAtivo.tenant_id
+                    tenantNome = vinculoAtivo.tenants?.nome || tenantId
+                } else {
+                    // Fallback caso a tabela não retorne linhas diretamente
+                    tenantId = data.user.app_metadata?.tenant_id || data.user.user_metadata?.tenant_id || 'demo'
+                }
 
                 localStorage.setItem('as_active_tenant', tenantId)
                 localStorage.setItem('as_auth_user', JSON.stringify({

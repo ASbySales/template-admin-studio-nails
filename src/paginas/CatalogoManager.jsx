@@ -48,7 +48,22 @@ export default function CatalogoManager() {
     const fetchDados = async () => {
         try {
             setLoading(true)
-            const tenantId = localStorage.getItem('as_active_tenant') || import.meta.env.VITE_TENANT_ID || 'demo'
+            let tenantId = localStorage.getItem('as_active_tenant')
+
+            // Sincroniza com os vínculos reais do usuário
+            const { data: vinculos } = await supabase
+                .from('tenants_usuarios')
+                .select('tenant_id, role, tenants(id, nome, segmento)')
+
+            if (vinculos && vinculos.length > 0) {
+                const valido = vinculos.some(v => v.tenant_id === tenantId)
+                if (!valido) {
+                    tenantId = vinculos[0].tenant_id
+                    localStorage.setItem('as_active_tenant', tenantId)
+                }
+            } else if (!tenantId) {
+                tenantId = import.meta.env.VITE_TENANT_ID || 'demo'
+            }
             
             // Busca dados do tenant ativo
             const { data: tData } = await supabase
@@ -398,17 +413,17 @@ export default function CatalogoManager() {
                                                                 <span className="text-xs font-bold text-[#C5A059]">R$ {parseFloat(serv.valor).toFixed(2).replace('.', ',')}</span>
                                                                 {serv.tipo === 'extra' && (
                                                                     <span className="text-[8px] font-bold bg-amber-50 text-amber-700 border border-amber-200 rounded px-1.5 py-0.5">
-                                                                        Unidade (Acrescenta)
+                                                                        Adicional (+ Extra)
                                                                     </span>
                                                                 )}
                                                                 {serv.tipo === 'substitutivo' && (
                                                                     <span className="text-[8px] font-bold bg-purple-50 text-purple-700 border border-purple-200 rounded px-1.5 py-0.5">
-                                                                        Substitui Unidade
+                                                                        Substitutivo / Variação
                                                                     </span>
                                                                 )}
                                                                 {!serv.tipo && (
                                                                     <span className="text-[8px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 rounded px-1.5 py-0.5">
-                                                                        Completo (10 unhas)
+                                                                        Item Principal
                                                                     </span>
                                                                 )}
                                                             </div>
@@ -572,15 +587,15 @@ export default function CatalogoManager() {
                             </div>
 
                             <div className="flex flex-col gap-1">
-                                <label className="text-xs font-bold text-gray-700">Tipo de Cobrança / Unidades</label>
+                                <label className="text-xs font-bold text-gray-700">Tipo de Item / Cobrança</label>
                                 <select 
                                     value={formTipo}
                                     onChange={(e) => setFormTipo(e.target.value)}
                                     className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:border-[#C5A059] bg-white"
                                 >
-                                    <option value="">Serviço Completo (mão completa — 10 unhas)</option>
-                                    <option value="extra">Unidade da unha (ex.: remoção — acrescenta)</option>
-                                    <option value="substitutivo">Substituição da unidade da unha (ex.: encapsulamento — substitui)</option>
+                                    <option value="">Item Principal (Padrão)</option>
+                                    <option value="extra">Adicional / Extra (Acrescenta ao pedido)</option>
+                                    <option value="substitutivo">Substituição / Variação (Substitui item base)</option>
                                 </select>
                             </div>
 
@@ -593,7 +608,7 @@ export default function CatalogoManager() {
                                     className="w-4.5 h-4.5 rounded text-[#C5A059] focus:ring-[#C5A059] border-gray-300 accent-[#C5A059] cursor-pointer"
                                 />
                                 <label htmlFor="aceita_adicionais" className="text-xs font-bold text-gray-700 cursor-pointer select-none">
-                                    Permitir adicionar Unitários neste serviço
+                                    Permitir adicionar complementos / adicionais neste item
                                 </label>
                             </div>
                         </div>
@@ -646,7 +661,7 @@ export default function CatalogoManager() {
                                         type="text" 
                                         value={catNome}
                                         onChange={(e) => setCatNome(e.target.value)}
-                                        placeholder="Ex: Banho em Gel ou Unhas Decoradas"
+                                        placeholder="Ex: Buquês, Cestas ou Arranjos"
                                         className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:border-[#C5A059] bg-white"
                                         required
                                     />

@@ -21,13 +21,30 @@ function App() {
       return
     }
 
+    const sincronizarTenant = async () => {
+      try {
+        const { data: vinculos } = await supabase
+          .from('tenants_usuarios')
+          .select('tenant_id, role, tenants(id, nome, segmento)')
+
+        if (vinculos && vinculos.length > 0) {
+          localStorage.setItem('as_user_tenants', JSON.stringify(vinculos))
+          const salvo = localStorage.getItem('as_active_tenant')
+          const valido = vinculos.some(v => v.tenant_id === salvo)
+          const tenantId = valido ? salvo : vinculos[0].tenant_id
+          localStorage.setItem('as_active_tenant', tenantId)
+        }
+      } catch (err) {
+        console.error('Erro ao sincronizar tenant do usuário:', err)
+      }
+    }
+
     // 1. Verifica sessão nativa existente
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
         setAutenticado(true)
         localStorage.setItem('admin_demo_auth', 'true')
-        const tenantId = session.user.app_metadata?.tenant_id || session.user.user_metadata?.tenant_id
-        if (tenantId) localStorage.setItem('as_active_tenant', tenantId)
+        sincronizarTenant()
       }
     })
 
@@ -41,11 +58,11 @@ function App() {
       if (session?.user) {
         setAutenticado(true)
         localStorage.setItem('admin_demo_auth', 'true')
-        const tenantId = session.user.app_metadata?.tenant_id || session.user.user_metadata?.tenant_id
-        if (tenantId) localStorage.setItem('as_active_tenant', tenantId)
+        sincronizarTenant()
       } else if (event === 'SIGNED_OUT') {
         setAutenticado(false)
         localStorage.removeItem('as_active_tenant')
+        localStorage.removeItem('as_user_tenants')
         localStorage.removeItem('as_auth_user')
         localStorage.removeItem('admin_demo_auth')
       }
