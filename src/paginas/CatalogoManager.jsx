@@ -10,7 +10,9 @@ import {
     Sparkles, 
     Image, 
     DollarSign,
-    Layers
+    Layers,
+    ArrowUp,
+    ArrowDown
 } from 'lucide-react'
 import AlbertSalesLogo from '../assets/AlbertSalesLogo.png'
 
@@ -81,27 +83,90 @@ export default function CatalogoManager() {
                 .from('categorias')
                 .select('*')
                 .eq('tenant_id', tenantId)
+                .order('ordem', { ascending: true })
                 .order('id', { ascending: true })
             
             if (errCat) throw errCat
-            setCategorias(catData || [])
+            const catsOrdenadas = [...(catData || [])].sort((a, b) => ((a.ordem ?? 999999) - (b.ordem ?? 999999)) || (a.id - b.id))
+            setCategorias(catsOrdenadas)
 
             const { data: servData, error: errServ } = await supabase
                 .from('servicos')
                 .select('*')
                 .eq('tenant_id', tenantId)
+                .order('ordem', { ascending: true })
+                .order('id', { ascending: true })
 
             if (errServ) throw errServ
-            setServicos(servData || [])
+            const servsOrdenados = [...(servData || [])].sort((a, b) => ((a.ordem ?? 999999) - (b.ordem ?? 999999)) || (a.id - b.id))
+            setServicos(servsOrdenados)
 
-            if (catData && catData.length > 0 && !formCategoriaId) {
-                setFormCategoriaId(catData[0].id.toString())
+            if (catsOrdenadas && catsOrdenadas.length > 0 && !formCategoriaId) {
+                setFormCategoriaId(catsOrdenadas[0].id.toString())
             }
         } catch (error) {
             console.error('Erro ao buscar dados do catálogo:', error)
             showToast('Erro ao carregar os dados.')
         } finally {
             setLoading(false)
+        }
+    }
+
+    // Reordenar Categorias
+    const handleMoverCategoria = async (index, direcao) => {
+        const destino = index + direcao
+        if (destino < 0 || destino >= categorias.length) return
+
+        const novas = [...categorias]
+        const [movida] = novas.splice(index, 1)
+        novas.splice(destino, 0, movida)
+
+        const atualizadas = novas.map((c, idx) => ({ ...c, ordem: idx }))
+        setCategorias(atualizadas)
+
+        try {
+            await Promise.all(
+                atualizadas.map((c, idx) => 
+                    supabase.from('categorias').update({ ordem: idx }).eq('id', c.id)
+                )
+            )
+            showToast('Ordem das categorias atualizada!')
+        } catch (err) {
+            console.error('Erro ao reordenar categorias:', err)
+            fetchDados()
+        }
+    }
+
+    // Reordenar Serviços dentro da Categoria
+    const handleMoverServico = async (servicoId, categoriaId, direcao) => {
+        const servsCat = servicos
+            .filter(s => s.categoria_id === categoriaId)
+            .sort((a, b) => ((a.ordem ?? 999999) - (b.ordem ?? 999999)) || (a.id - b.id))
+
+        const index = servsCat.findIndex(s => s.id === servicoId)
+        if (index === -1) return
+
+        const destino = index + direcao
+        if (destino < 0 || destino >= servsCat.length) return
+
+        const novosServsCat = [...servsCat]
+        const [movido] = novosServsCat.splice(index, 1)
+        novosServsCat.splice(destino, 0, movido)
+
+        const mapaOrdens = new Map(novosServsCat.map((s, idx) => [s.id, idx]))
+
+        setServicos(prev => prev.map(s => mapaOrdens.has(s.id) ? { ...s, ordem: mapaOrdens.get(s.id) } : s))
+
+        try {
+            await Promise.all(
+                novosServsCat.map((s, idx) =>
+                    supabase.from('servicos').update({ ordem: idx }).eq('id', s.id)
+                )
+            )
+            showToast('Ordem do item atualizada!')
+        } catch (err) {
+            console.error('Erro ao reordenar serviço:', err)
+            fetchDados()
         }
     }
 
@@ -374,22 +439,46 @@ export default function CatalogoManager() {
                     </div>
                 ) : (
                     <div className="flex flex-col gap-8">
-                        {categorias.map((cat) => {
-                            const servsDaCat = servicos.filter(s => s.categoria_id === cat.id)
+                        {categorias.map((cat, catIdx) => {
+                            const servsDaCat = servicos
+                                .filter(s => s.categoria_id === cat.id)
+                                .sort((a, b) => ((a.ordem ?? 999999) - (b.ordem ?? 999999)) || (a.id - b.id))
 
                             return (
                                 <div key={cat.id} className="w-full flex flex-col gap-3 text-left">
                                     <div className="flex justify-between items-center border-b border-[#D9A09E]/30 pb-2">
-                                        <h2 className="text-lg font-cinzel font-bold text-gray-800 tracking-wide flex items-center flex-wrap gap-2">
-                                            <span>{cat.nome}</span>
-                                            <span className={`text-[10px] font-sans font-bold rounded-full px-2.5 py-0.5 border ${
-                                                cat.escolha 
-                                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
-                                                    : 'bg-purple-50 text-purple-700 border-purple-200'
-                                            }`}>
-                                                {cat.escolha ? 'Aparece no catálogo' : 'Não aparece no catálogo'}
-                                            </span>
-                                        </h2>
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                            <div className="flex items-center gap-1">
+                                                <button
+                                                    type="button"
+                                                    disabled={catIdx === 0}
+                                                    onClick={() => handleMoverCategoria(catIdx, -1)}
+                                                    className="h-7 w-7 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 disabled:opacity-25 disabled:cursor-not-allowed flex items-center justify-center transition-colors cursor-pointer"
+                                                    title="Mover categoria para cima"
+                                                >
+                                                    <ArrowUp className="w-3.5 h-3.5" />
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    disabled={catIdx === categorias.length - 1}
+                                                    onClick={() => handleMoverCategoria(catIdx, 1)}
+                                                    className="h-7 w-7 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 disabled:opacity-25 disabled:cursor-not-allowed flex items-center justify-center transition-colors cursor-pointer"
+                                                    title="Mover categoria para baixo"
+                                                >
+                                                    <ArrowDown className="w-3.5 h-3.5" />
+                                                </button>
+                                            </div>
+                                            <h2 className="text-lg font-cinzel font-bold text-gray-800 tracking-wide flex items-center flex-wrap gap-2">
+                                                <span>{cat.nome}</span>
+                                                <span className={`text-[10px] font-sans font-bold rounded-full px-2.5 py-0.5 border ${
+                                                    cat.escolha 
+                                                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+                                                        : 'bg-purple-50 text-purple-700 border-purple-200'
+                                                }`}>
+                                                    {cat.escolha ? 'Aparece no catálogo' : 'Não aparece no catálogo'}
+                                                </span>
+                                            </h2>
+                                        </div>
                                         <span className="text-xs text-gray-400 font-semibold">{servsDaCat.length} itens</span>
                                     </div>
 
@@ -397,7 +486,7 @@ export default function CatalogoManager() {
                                         <p className="text-xs text-gray-400 italic py-2 pl-2">Nenhum serviço cadastrado nesta categoria.</p>
                                     ) : (
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            {servsDaCat.map((serv) => (
+                                            {servsDaCat.map((serv, servIdx) => (
                                                 <div key={serv.id} className="bg-white rounded-2xl border border-gray-200/80 p-3.5 shadow-2xs hover:shadow-xs transition-shadow flex items-center justify-between gap-4">
                                                     <div className="flex items-center gap-3.5 min-w-0">
                                                         <img 
@@ -431,6 +520,26 @@ export default function CatalogoManager() {
                                                     </div>
 
                                                     <div className="flex items-center gap-1.5 flex-shrink-0">
+                                                        <div className="flex flex-col gap-0.5">
+                                                            <button 
+                                                                type="button"
+                                                                disabled={servIdx === 0}
+                                                                onClick={() => handleMoverServico(serv.id, cat.id, -1)}
+                                                                className="h-4 w-7 rounded bg-gray-50 hover:bg-gray-200 text-gray-500 disabled:opacity-20 disabled:cursor-not-allowed flex items-center justify-center transition-colors cursor-pointer"
+                                                                title="Subir posição no catálogo"
+                                                            >
+                                                                <ArrowUp className="w-3 h-3" />
+                                                            </button>
+                                                            <button 
+                                                                type="button"
+                                                                disabled={servIdx === servsDaCat.length - 1}
+                                                                onClick={() => handleMoverServico(serv.id, cat.id, 1)}
+                                                                className="h-4 w-7 rounded bg-gray-50 hover:bg-gray-200 text-gray-500 disabled:opacity-20 disabled:cursor-not-allowed flex items-center justify-center transition-colors cursor-pointer"
+                                                                title="Descer posição no catálogo"
+                                                            >
+                                                                <ArrowDown className="w-3 h-3" />
+                                                            </button>
+                                                        </div>
                                                         <button 
                                                             onClick={() => handleOpenEditModal(serv)}
                                                             className="h-8 w-8 rounded-lg bg-gray-50 hover:bg-gray-100 text-gray-500 hover:text-gray-800 flex justify-center items-center border border-gray-200 transition-colors cursor-pointer"
@@ -711,7 +820,7 @@ export default function CatalogoManager() {
                                     {categorias.length === 0 ? (
                                         <p className="text-xs text-gray-400 italic py-2 text-center">Nenhuma categoria cadastrada.</p>
                                     ) : (
-                                        categorias.map((cat) => (
+                                        categorias.map((cat, idx) => (
                                              <div key={cat.id} className="bg-white rounded-xl border border-gray-200/80 p-2.5 flex items-center justify-between gap-3 shadow-3xs">
                                                 <div className="flex flex-col min-w-0">
                                                     <span className="text-xs font-bold text-gray-800 truncate">{cat.nome}</span>
@@ -721,6 +830,24 @@ export default function CatalogoManager() {
                                                 </div>
 
                                                 <div className="flex items-center gap-1 flex-shrink-0">
+                                                    <button 
+                                                        type="button"
+                                                        disabled={idx === 0}
+                                                        onClick={() => handleMoverCategoria(idx, -1)}
+                                                        className="h-7 w-7 rounded-lg bg-gray-50 hover:bg-gray-100 text-gray-500 hover:text-gray-800 disabled:opacity-20 disabled:cursor-not-allowed flex justify-center items-center border border-gray-200 transition-colors cursor-pointer"
+                                                        title="Mover categoria para cima"
+                                                    >
+                                                        <ArrowUp className="w-3 h-3" />
+                                                    </button>
+                                                    <button 
+                                                        type="button"
+                                                        disabled={idx === categorias.length - 1}
+                                                        onClick={() => handleMoverCategoria(idx, 1)}
+                                                        className="h-7 w-7 rounded-lg bg-gray-50 hover:bg-gray-100 text-gray-500 hover:text-gray-800 disabled:opacity-20 disabled:cursor-not-allowed flex justify-center items-center border border-gray-200 transition-colors cursor-pointer"
+                                                        title="Mover categoria para baixo"
+                                                    >
+                                                        <ArrowDown className="w-3 h-3" />
+                                                    </button>
                                                     <button 
                                                         type="button"
                                                         onClick={() => {
