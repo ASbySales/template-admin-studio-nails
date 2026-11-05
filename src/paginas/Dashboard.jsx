@@ -15,9 +15,11 @@ import {
     Database, 
     User,
     Package,
-    Lock
+    Lock,
+    CreditCard
 } from 'lucide-react'
 import AlbertSalesLogo from '../assets/AlbertSalesLogo.png'
+import BloqueioInadimplencia from '../componentes/BloqueioInadimplencia'
 
 export default function Dashboard() {
     const [solicitacoes, setSolicitacoes] = useState([])
@@ -32,6 +34,7 @@ export default function Dashboard() {
         return localStorage.getItem('as_active_tenant') || import.meta.env.VITE_TENANT_ID || 'demo'
     })
     const [tenantInfo, setTenantInfo] = useState(null)
+    const [assinatura, setAssinatura] = useState(null)
     const [userTenants, setUserTenants] = useState(() => {
         try {
             return JSON.parse(localStorage.getItem('as_user_tenants') || '[]')
@@ -135,6 +138,14 @@ export default function Dashboard() {
                 setTenantInfo(tData)
                 document.title = `${tData.nome} • Painel AS Gestão`
             }
+
+            // 2.5 Busca situação da assinatura do tenant
+            const { data: assData } = await supabase
+                .from('assinaturas_tenant')
+                .select('*')
+                .eq('tenant_id', currentTenant)
+                .single()
+            setAssinatura(assData)
 
 
             // 3. Busca serviços para cruzar nomes e valores
@@ -429,6 +440,18 @@ export default function Dashboard() {
         return matchNome || matchTel || matchServicos
     })
 
+    // Se o estabelecimento estiver atrasado ou bloqueado, exibe tela de cobrança e bloqueio do painel
+    if (assinatura && (assinatura.status === 'atrasado' || assinatura.status === 'bloqueado')) {
+        return (
+            <BloqueioInadimplencia 
+                tenantInfo={tenantInfo} 
+                assinatura={assinatura} 
+                onAtualizarStatus={fetchDados} 
+                onDeslogar={deslogarAdmin} 
+            />
+        )
+    }
+
     return (
         <div className="min-h-screen w-full bg-gray-50 flex flex-col font-sans">
             
@@ -483,6 +506,14 @@ export default function Dashboard() {
                     >
                         <Package className="w-4 h-4 text-[#C5A059]" />
                         <span className="hidden sm:inline">Catálogo</span>
+                    </button>
+                    <button 
+                        onClick={() => navigate('/pagamentos')}
+                        className="flex items-center gap-1.5 text-xs font-bold text-gray-700 bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-xl transition-all cursor-pointer"
+                        title="Minha Assinatura e Pagamentos"
+                    >
+                        <CreditCard className="w-4 h-4 text-[#C5A059]" />
+                        <span className="hidden sm:inline">Assinatura</span>
                     </button>
                     <button 
                         onClick={() => navigate('/redefinir-senha')}

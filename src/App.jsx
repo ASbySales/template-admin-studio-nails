@@ -5,6 +5,7 @@ import Login from './paginas/Login'
 import RedefinirSenha from './paginas/RedefinirSenha'
 import Dashboard from './paginas/Dashboard'
 import CatalogoManager from './paginas/CatalogoManager'
+import MinhaAssinatura from './paginas/MinhaAssinatura'
 import './App.css'
 
 function App() {
@@ -104,6 +105,22 @@ function App() {
         element={
           <RotaProtegida>
             <CatalogoManager />
+          </RotaProtegida>
+        } 
+      />
+      <Route 
+        path="/pagamentos" 
+        element={
+          <RotaProtegida>
+            <MinhaAssinatura />
+          </RotaProtegida>
+        } 
+      />
+      <Route 
+        path="/assinatura" 
+        element={
+          <RotaProtegida>
+            <MinhaAssinatura />
           </RotaProtegida>
         } 
       />

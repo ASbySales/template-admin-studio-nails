@@ -12,9 +12,11 @@ import {
     DollarSign,
     Layers,
     ArrowUp,
-    ArrowDown
+    ArrowDown,
+    CreditCard
 } from 'lucide-react'
 import AlbertSalesLogo from '../assets/AlbertSalesLogo.png'
+import BloqueioInadimplencia from '../componentes/BloqueioInadimplencia'
 
 export default function CatalogoManager() {
     const [servicos, setServicos] = useState([])
@@ -41,7 +43,20 @@ export default function CatalogoManager() {
     const [catEscolha, setCatEscolha] = useState(true)
 
     const [tenantInfo, setTenantInfo] = useState(null)
+    const [assinatura, setAssinatura] = useState(null)
     const navigate = useNavigate()
+
+    const deslogarAdmin = async () => {
+        try {
+            await supabase.auth.signOut()
+        } catch (err) {
+            console.error('Erro ao encerrar sessão Supabase:', err)
+        }
+        localStorage.removeItem('admin_demo_auth')
+        localStorage.removeItem('as_active_tenant')
+        localStorage.removeItem('as_auth_user')
+        navigate('/login')
+    }
 
     useEffect(() => {
         fetchDados()
@@ -78,6 +93,14 @@ export default function CatalogoManager() {
                 setTenantInfo(tData)
                 document.title = `${tData.nome} • Gerenciar Catálogo`
             }
+
+            // Busca assinatura do tenant
+            const { data: assData } = await supabase
+                .from('assinaturas_tenant')
+                .select('*')
+                .eq('tenant_id', tenantId)
+                .single()
+            setAssinatura(assData)
 
             const { data: catData, error: errCat } = await supabase
                 .from('categorias')
@@ -372,6 +395,18 @@ export default function CatalogoManager() {
         }
     }
 
+    // Se o estabelecimento estiver atrasado ou bloqueado, bloqueia acesso e exibe tela de cobrança
+    if (assinatura && (assinatura.status === 'atrasado' || assinatura.status === 'bloqueado')) {
+        return (
+            <BloqueioInadimplencia 
+                tenantInfo={tenantInfo} 
+                assinatura={assinatura} 
+                onAtualizarStatus={fetchDados} 
+                onDeslogar={deslogarAdmin} 
+            />
+        )
+    }
+
     return (
         <div className="min-h-screen w-full bg-gray-50 flex flex-col font-sans">
             
@@ -401,6 +436,14 @@ export default function CatalogoManager() {
                 </div>
 
                 <div className="flex items-center gap-2">
+                    <button 
+                        onClick={() => navigate('/pagamentos')}
+                        className="flex items-center gap-1.5 text-xs font-bold text-gray-700 bg-gray-100 hover:bg-gray-200 px-3.5 py-2.5 rounded-xl transition-all cursor-pointer hover:scale-[1.02] active:scale-95"
+                        title="Minha Assinatura e Pagamentos"
+                    >
+                        <CreditCard className="w-4 h-4 text-[#C5A059]" />
+                        <span className="hidden sm:inline">Assinatura</span>
+                    </button>
                     <button 
                         onClick={() => {
                             setCatEditandoId(null)
