@@ -1,8 +1,8 @@
 // supabase/functions/sync-torre/index.ts
 // Edge Function da AS Gestão (lbtbxkwffixnvbsibcip)
-// Recebe comandos autenticados do Admin Master da Torre e sincroniza usando SUPABASE_SERVICE_ROLE_KEY nativa.
+// Valida o Admin Master na Torre e executa 1 única RPC transacional atômica no banco da AS Gestão.
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { createClient } from 'npm:@supabase/supabase-js@2.49.1'
 
 const ALLOWED_ORIGINS = new Set([
   'https://gestao.asales.online',
@@ -26,10 +26,8 @@ const TORRE_SUPABASE_ANON_KEY = 'sb_publishable_XMwhuIOUwF4qyK9q330nRw_1ewUHPq8'
 const VALID_ASSINATURA_STATUS = new Set(['em_dia', 'atrasado', 'bloqueado', 'pendente_sync'])
 const COMPETENCIA_REGEX = /^(0[1-9]|1[0-2])\/(20\d{2}|2100)$/
 const ISO_DATE_REGEX = /^(\d{4})-(\d{2})-(\d{2})$/
+const ISO_TIMESTAMP_REGEX = /^(\d{4}-\d{2}-\d{2})T([01]\d|2[0-3]):([0-5]\d):([0-5]\d)(?:\.\d{1,6})?(Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/
 
-/**
- * Valida se uma string YYYY-MM-DD representa uma data real de calendário (ex: rejeita 2025-99-99 e 2026-02-30).
- */
 function isValidCalendarDate(value: unknown): value is string {
   if (typeof value !== 'string') return false
   const match = ISO_DATE_REGEX.exec(value.trim())
@@ -51,13 +49,13 @@ function isValidCalendarDate(value: unknown): value is string {
   )
 }
 
-/**
- * Valida se uma string representa um timestamp ISO-8601 válido e retorna sua forma canônica ISO.
- */
-function parseValidIsoTimestamp(value: unknown): string | null {
+function parseStrictIsoTimestamp(value: unknown): string | null {
   if (typeof value !== 'string') return null
   const trimmed = value.trim()
-  if (trimmed.length < 10 || trimmed.length > 40) return null
+  const match = ISO_TIMESTAMP_REGEX.exec(trimmed)
+  if (!match) return null
+  if (!isValidCalendarDate(match[1])) return null
+
   const ms = Date.parse(trimmed)
   if (Number.isNaN(ms)) return null
   return new Date(ms).toISOString()
@@ -102,7 +100,7 @@ Deno.serve(async (req) => {
       })
     }
 
-    // 2. Lê e valida TODO o payload ANTES de qualquer escrita no banco
+    // 2. Valida 100% do payload antes de qualquer chamada ao banco
     let body: Record<string, unknown>
     try {
       const parsed = await req.json()
@@ -128,8 +126,8 @@ Deno.serve(async (req) => {
       })
     }
 
-    let statusValidado: string | undefined = undefined
-    if (body.status !== undefined) {
+    let statusValidado: string | null = null
+    if (body.status !== undefined && body.status !== null) {
       if (typeof body.status !== 'string' || !VALID_ASSINATURA_STATUS.has(body.status.trim())) {
         return new Response(JSON.stringify({ error: 'Status de assinatura inválido.' }), {
           status: 400,
@@ -139,12 +137,8 @@ Deno.serve(async (req) => {
       statusValidado = body.status.trim()
     }
 
-    const updateAssinatura: Record<string, unknown> = { atualizado_em: new Date().toISOString() }
-    if (statusValidado !== undefined) {
-      updateAssinatura.status = statusValidado
-    }
-
-    if (body.valor_mensalidade !== undefined) {
+    let valorMensalidadeValidado: number | null = null
+    if (body.valor_mensalidade !== undefined && body.valor_mensalidade !== null) {
       const val = Number(body.valor_mensalidade)
       if (!Number.isFinite(val) || val < 0 || val > 100000) {
         return new Response(JSON.stringify({ error: 'valor_mensalidade inválido.' }), {
@@ -152,10 +146,11 @@ Deno.serve(async (req) => {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         })
       }
-      updateAssinatura.valor_mensalidade = Number(val.toFixed(2))
+      valorMensalidadeValidado = Number(val.toFixed(2))
     }
 
-    if (body.dia_vencimento !== undefined) {
+    let diaVencimentoValidado: number | null = null
+    if (body.dia_vencimento !== undefined && body.dia_vencimento !== null) {
       const dia = Number(body.dia_vencimento)
       if (!Number.isInteger(dia) || dia < 1 || dia > 31) {
         return new Response(JSON.stringify({ error: 'dia_vencimento deve ser um inteiro entre 1 e 31.' }), {
@@ -163,42 +158,44 @@ Deno.serve(async (req) => {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         })
       }
-      updateAssinatura.dia_vencimento = dia
+      diaVencimentoValidado = dia
     }
 
-    if (body.proximo_vencimento !== undefined) {
-      if (body.proximo_vencimento !== null && !isValidCalendarDate(body.proximo_vencimento)) {
-        return new Response(JSON.stringify({ error: 'proximo_vencimento deve ser uma data real no formato YYYY-MM-DD ou null.' }), {
+    let proximoVencimentoValidado: string | null = null
+    if (body.proximo_vencimento !== undefined && body.proximo_vencimento !== null) {
+      if (!isValidCalendarDate(body.proximo_vencimento)) {
+        return new Response(JSON.stringify({ error: 'proximo_vencimento deve ser uma data real YYYY-MM-DD.' }), {
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         })
       }
-      updateAssinatura.proximo_vencimento = body.proximo_vencimento === null ? null : body.proximo_vencimento.trim()
+      proximoVencimentoValidado = body.proximo_vencimento.trim()
     }
 
-    if (body.isento_cobranca !== undefined) {
+    let isentoCobrancaValidado: boolean | null = null
+    if (body.isento_cobranca !== undefined && body.isento_cobranca !== null) {
       if (typeof body.isento_cobranca !== 'boolean') {
-        return new Response(JSON.stringify({ error: 'isento_cobranca deve ser estritamente um booleano (true ou false).' }), {
+        return new Response(JSON.stringify({ error: 'isento_cobranca deve ser estritamente booleano.' }), {
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         })
       }
-      updateAssinatura.isento_cobranca = body.isento_cobranca
+      isentoCobrancaValidado = body.isento_cobranca
     }
 
-    if (body.adiado_ate !== undefined) {
-      if (body.adiado_ate !== null && !isValidCalendarDate(body.adiado_ate)) {
-        return new Response(JSON.stringify({ error: 'adiado_ate deve ser uma data real no formato YYYY-MM-DD ou null.' }), {
+    const limparAdiamento = body.adiado_ate === null
+    let adiadoAteValidado: string | null = null
+    if (body.adiado_ate !== undefined && body.adiado_ate !== null) {
+      if (!isValidCalendarDate(body.adiado_ate)) {
+        return new Response(JSON.stringify({ error: 'adiado_ate deve ser uma data real YYYY-MM-DD ou null.' }), {
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         })
       }
-      updateAssinatura.adiado_ate = body.adiado_ate === null ? null : body.adiado_ate.trim()
+      adiadoAteValidado = body.adiado_ate.trim()
     }
 
-    // Validação completa de fatura_paga ANTES de qualquer escrita
     let faturaPagaValidada: {
-      tenant_id: string
       competencia: string
       valor: number
       data_vencimento: string
@@ -240,7 +237,6 @@ Deno.serve(async (req) => {
         })
       }
 
-      // Contrato estrito: fatura_paga só aceita status 'paga'
       if (fp.status !== undefined && fp.status !== 'paga') {
         return new Response(JSON.stringify({ error: 'fatura_paga aceita apenas status "paga".' }), {
           status: 400,
@@ -250,9 +246,9 @@ Deno.serve(async (req) => {
 
       let dataPagamentoIso = new Date().toISOString()
       if (fp.data_pagamento !== undefined && fp.data_pagamento !== null) {
-        const parsedTs = parseValidIsoTimestamp(fp.data_pagamento)
+        const parsedTs = parseStrictIsoTimestamp(fp.data_pagamento)
         if (!parsedTs) {
-          return new Response(JSON.stringify({ error: 'data_pagamento deve ser um timestamp ISO-8601 válido.' }), {
+          return new Response(JSON.stringify({ error: 'data_pagamento deve estar no formato estrito ISO-8601 (YYYY-MM-DDTHH:mm:ssZ).' }), {
             status: 400,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' }
           })
@@ -272,7 +268,6 @@ Deno.serve(async (req) => {
       }
 
       faturaPagaValidada = {
-        tenant_id,
         competencia,
         valor: Number(valorFatura.toFixed(2)),
         data_vencimento: fp.data_vencimento.trim(),
@@ -282,63 +277,46 @@ Deno.serve(async (req) => {
       }
     }
 
-    // 3. Somente após 100% do payload estar validado, abre conexão service_role e executa as escritas
+    // 3. Executa UMA ÚNICA RPC transacional atômica no banco da AS Gestão
     const asGestaoUrl = Deno.env.get('SUPABASE_URL')
-    const asGestaoServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+    const asGestaoSecretKey =
+      Deno.env.get('SUPABASE_SECRET_KEY') ||
+      Deno.env.get('AS_GESTAO_SECRET_KEY') ||
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
 
-    if (!asGestaoUrl || !asGestaoServiceKey) {
+    if (!asGestaoUrl || !asGestaoSecretKey) {
       return new Response(JSON.stringify({ error: 'Configuração interna do servidor incompleta.' }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       })
     }
 
-    const asAdmin = createClient(asGestaoUrl, asGestaoServiceKey, {
+    const asAdmin = createClient(asGestaoUrl, asGestaoSecretKey, {
       auth: { persistSession: false, autoRefreshToken: false }
     })
 
-    if (statusValidado) {
-      const { error: rpcErr } = await asAdmin.rpc('sincronizar_status_assinatura_torre', {
-        p_tenant_id: tenant_id,
-        p_status: statusValidado
-      })
-      if (rpcErr) {
-        console.error('[sync-torre] Erro na RPC sincronizar_status_assinatura_torre:', rpcErr.message)
-        return new Response(JSON.stringify({ error: 'Falha ao sincronizar status da assinatura.' }), {
-          status: 500,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        })
-      }
-    }
+    const { data: rpcData, error: rpcErr } = await asAdmin.rpc('sincronizar_status_assinatura_torre', {
+      p_tenant_id: tenant_id,
+      p_status: statusValidado,
+      p_valor_mensalidade: valorMensalidadeValidado,
+      p_dia_vencimento: diaVencimentoValidado,
+      p_proximo_vencimento: proximoVencimentoValidado,
+      p_isento_cobranca: isentoCobrancaValidado,
+      p_adiado_ate: adiadoAteValidado,
+      p_limpar_adiamento: limparAdiamento,
+      p_fatura_paga: faturaPagaValidada
+    })
 
-    const { error: upsertAssinaturaErr } = await asAdmin
-      .from('assinaturas_tenant')
-      .upsert({ tenant_id, ...updateAssinatura }, { onConflict: 'tenant_id' })
-
-    if (upsertAssinaturaErr) {
-      console.error('[sync-torre] Erro no upsert de assinaturas_tenant:', upsertAssinaturaErr.message)
-      return new Response(JSON.stringify({ error: 'Falha ao atualizar dados da assinatura.' }), {
+    if (rpcErr) {
+      console.error('[sync-torre] Erro na RPC transacional sincronizar_status_assinatura_torre:', rpcErr.message)
+      return new Response(JSON.stringify({ error: 'Falha ao sincronizar assinatura/fatura no banco.' }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       })
     }
 
-    if (faturaPagaValidada) {
-      const { error: upsertFaturaErr } = await asAdmin
-        .from('faturas_tenant')
-        .upsert(faturaPagaValidada, { onConflict: 'tenant_id,competencia' })
-
-      if (upsertFaturaErr) {
-        console.error('[sync-torre] Erro no upsert de faturas_tenant:', upsertFaturaErr.message)
-        return new Response(JSON.stringify({ error: 'Falha ao sincronizar fatura paga do tenant.' }), {
-          status: 500,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        })
-      }
-    }
-
     return new Response(
-      JSON.stringify({ sucesso: true, tenant_id, status_aplicado: statusValidado || 'mantido' }),
+      JSON.stringify(rpcData || { sucesso: true, tenant_id, status_aplicado: statusValidado || 'mantido' }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   } catch (err) {
