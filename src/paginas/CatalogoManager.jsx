@@ -395,8 +395,11 @@ export default function CatalogoManager() {
         }
     }
 
-    // Se o estabelecimento estiver atrasado ou bloqueado, bloqueia acesso e exibe tela de cobrança
-    if (assinatura && (assinatura.status === 'atrasado' || assinatura.status === 'bloqueado')) {
+    // Se o estabelecimento estiver atrasado ou bloqueado (respeitando isenção/cortesia e adiamento vigente), bloqueia acesso e exibe tela de cobrança
+    const hojeBrasil = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' })
+    const isIsento = Boolean(assinatura?.isento_cobranca)
+    const adiamentoVigente = Boolean(assinatura?.adiado_ate && assinatura.adiado_ate >= hojeBrasil)
+    if (assinatura && !isIsento && !adiamentoVigente && (assinatura.status === 'atrasado' || assinatura.status === 'bloqueado')) {
         return (
             <BloqueioInadimplencia 
                 tenantInfo={tenantInfo} 

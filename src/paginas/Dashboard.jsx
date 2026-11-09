@@ -440,8 +440,11 @@ export default function Dashboard() {
         return matchNome || matchTel || matchServicos
     })
 
-    // Se o estabelecimento estiver atrasado ou bloqueado, exibe tela de cobrança e bloqueio do painel
-    if (assinatura && (assinatura.status === 'atrasado' || assinatura.status === 'bloqueado')) {
+    // Se o estabelecimento estiver atrasado ou bloqueado (respeitando isenção/cortesia e adiamento vigente), exibe tela de cobrança e bloqueio do painel
+    const hojeBrasil = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' })
+    const isIsento = Boolean(assinatura?.isento_cobranca)
+    const adiamentoVigente = Boolean(assinatura?.adiado_ate && assinatura.adiado_ate >= hojeBrasil)
+    if (assinatura && !isIsento && !adiamentoVigente && (assinatura.status === 'atrasado' || assinatura.status === 'bloqueado')) {
         return (
             <BloqueioInadimplencia 
                 tenantInfo={tenantInfo} 
