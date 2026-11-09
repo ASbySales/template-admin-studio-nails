@@ -90,20 +90,29 @@ Deno.serve(async (req) => {
 
     // 5. Se veio fatura/recibo (Nota Comprovante), grava em faturas_tenant na conta do cliente
     if (fatura_paga && fatura_paga.competencia) {
-      await asAdmin
+      const payloadFatura: Record<string, unknown> = {
+        tenant_id,
+        competencia: String(fatura_paga.competencia).trim(),
+        valor: Number(fatura_paga.valor ?? 69.9),
+        data_vencimento: fatura_paga.data_vencimento,
+        data_pagamento: fatura_paga.data_pagamento || new Date().toISOString(),
+        status: fatura_paga.status === 'pago' ? 'paga' : (fatura_paga.status || 'paga'),
+        recibo_path: fatura_paga.recibo_path || fatura_paga.recibo_url || null
+      }
+
+      const { error: fatErr } = await asAdmin
         .from('faturas_tenant')
-        .upsert(
-          {
-            tenant_id,
-            competencia: fatura_paga.competencia,
-            valor: fatura_paga.valor ?? 69.9,
-            data_vencimento: fatura_paga.data_vencimento,
-            data_pagamento: fatura_paga.data_pagamento || new Date().toISOString(),
-            status: fatura_paga.status || 'pago',
-            recibo_url: fatura_paga.recibo_url || null
-          },
-          { onConflict: 'tenant_id,competencia' }
-        )
+        .upsert(payloadFatura, { onConflict: 'tenant_id,competencia' })
+
+      if (fatErr) {
+        // Fallback caso a coluna se chame recibo_url no banco
+        delete payloadFatura.recibo_path
+        payloadFatura.recibo_url = fatura_paga.recibo_path || fatura_paga.recibo_url || null
+        payloadFatura.status = fatura_paga.status === 'paga' ? 'pago' : (fatura_paga.status || 'pago')
+        await asAdmin
+          .from('faturas_tenant')
+          .upsert(payloadFatura, { onConflict: 'tenant_id,competencia' })
+      }
     }
 
     return new Response(
