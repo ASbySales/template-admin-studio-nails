@@ -174,10 +174,11 @@ Deno.serve(async (req) => {
       diaVencimentoValidado = dia
     }
 
+    const limparProximoVencimento = body.proximo_vencimento === null
     let proximoVencimentoValidado: string | null = null
     if (body.proximo_vencimento !== undefined && body.proximo_vencimento !== null) {
       if (!isValidCalendarDate(body.proximo_vencimento)) {
-        return new Response(JSON.stringify({ error: 'proximo_vencimento deve ser uma data real YYYY-MM-DD.' }), {
+        return new Response(JSON.stringify({ error: 'proximo_vencimento deve ser uma data real YYYY-MM-DD ou null.' }), {
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         })
@@ -314,6 +315,7 @@ Deno.serve(async (req) => {
       p_valor_mensalidade: valorMensalidadeValidado,
       p_dia_vencimento: diaVencimentoValidado,
       p_proximo_vencimento: proximoVencimentoValidado,
+      p_limpar_proximo_vencimento: limparProximoVencimento,
       p_isento_cobranca: isentoCobrancaValidado,
       p_adiado_ate: adiadoAteValidado,
       p_limpar_adiamento: limparAdiamento,
