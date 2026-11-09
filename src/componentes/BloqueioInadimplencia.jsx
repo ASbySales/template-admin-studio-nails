@@ -3,17 +3,19 @@ import { LogOut, Copy, Check, Send, RefreshCw, ShieldAlert, Sparkles } from 'luc
 import AlbertSalesLogo from '../assets/AlbertSalesLogo.png'
 
 const WHATSAPP_AS = '5583996327988'
+const CHAVE_PIX_PADRAO = '4lbert.ns@gmail.com'
 
 export default function BloqueioInadimplencia({ tenantInfo, assinatura, onAtualizarStatus, onDeslogar }) {
     const [copiado, setCopiado] = useState(false)
     const [verificando, setVerificando] = useState(false)
 
-    const valorMensalidade = parseFloat(assinatura?.valor_mensalidade || 0).toFixed(2).replace('.', ',')
+    const valorNum = parseFloat(assinatura?.valor_mensalidade || 0)
+    const valorMensalidade = (valorNum > 0 ? valorNum : 69.90).toFixed(2).replace('.', ',')
     const qrcodeImg = assinatura?.qrcode_pix_url || '/qrcode-pix.jpg'
+    const chavePixAtiva = assinatura?.chave_pix || CHAVE_PIX_PADRAO
 
     const handleCopiarPix = () => {
-        if (!assinatura?.chave_pix) return
-        navigator.clipboard.writeText(assinatura.chave_pix)
+        navigator.clipboard.writeText(chavePixAtiva)
         setCopiado(true)
         setTimeout(() => setCopiado(false), 2500)
     }
@@ -99,7 +101,7 @@ export default function BloqueioInadimplencia({ tenantInfo, assinatura, onAtuali
                             <input 
                                 type="text" 
                                 readOnly 
-                                value={assinatura?.chave_pix || ''}
+                                value={chavePixAtiva}
                                 className="w-full bg-white px-3 py-2 text-xs font-mono border border-gray-200 rounded-xl text-gray-700 select-all focus:outline-none"
                             />
                             <button 

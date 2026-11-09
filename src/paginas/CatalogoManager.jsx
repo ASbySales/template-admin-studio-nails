@@ -395,11 +395,22 @@ export default function CatalogoManager() {
         }
     }
 
-    // Se o estabelecimento estiver atrasado ou bloqueado (respeitando isenção/cortesia e adiamento vigente), bloqueia acesso e exibe tela de cobrança
+    // Se o estabelecimento estiver bloqueado ou com vencimento + 3 dias de tolerância expirados (respeitando isenção/cortesia e adiamento vigente), bloqueia acesso e exibe tela de cobrança
     const hojeBrasil = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' })
     const isIsento = Boolean(assinatura?.isento_cobranca)
     const adiamentoVigente = Boolean(assinatura?.adiado_ate && assinatura.adiado_ate >= hojeBrasil)
-    if (assinatura && !isIsento && !adiamentoVigente && (assinatura.status === 'atrasado' || assinatura.status === 'bloqueado')) {
+    const vencimentoExpirado = (() => {
+        if (!assinatura?.proximo_vencimento) return false
+        const dt = new Date(`${assinatura.proximo_vencimento.split('T')[0]}T12:00:00`)
+        dt.setDate(dt.getDate() + 3) // 3 dias de tolerância padrão
+        return dt.toISOString().split('T')[0] < hojeBrasil
+    })()
+    const bloqueioAtivo = assinatura && !isIsento && !adiamentoVigente && (
+        assinatura.status === 'bloqueado' ||
+        vencimentoExpirado ||
+        (assinatura.status === 'atrasado' && !assinatura.proximo_vencimento)
+    )
+    if (bloqueioAtivo) {
         return (
             <BloqueioInadimplencia 
                 tenantInfo={tenantInfo} 

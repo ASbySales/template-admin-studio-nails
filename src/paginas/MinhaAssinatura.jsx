@@ -19,6 +19,7 @@ import {
 import AlbertSalesLogo from '../assets/AlbertSalesLogo.png'
 
 const WHATSAPP_AS = '5583996327988'
+const CHAVE_PIX_PADRAO = '4lbert.ns@gmail.com'
 
 export default function MinhaAssinatura() {
     const navigate = useNavigate()
@@ -79,9 +80,10 @@ export default function MinhaAssinatura() {
         }
     }
 
+    const chavePixAtiva = assinatura?.chave_pix || CHAVE_PIX_PADRAO
+
     const handleCopiarPix = () => {
-        if (!assinatura?.chave_pix) return
-        navigator.clipboard.writeText(assinatura.chave_pix)
+        navigator.clipboard.writeText(chavePixAtiva)
         setCopiado(true)
         setTimeout(() => setCopiado(false), 2500)
     }
@@ -300,7 +302,7 @@ export default function MinhaAssinatura() {
                                                 <input 
                                                     type="text" 
                                                     readOnly 
-                                                    value={assinatura?.chave_pix || ''}
+                                                    value={chavePixAtiva}
                                                     className="w-full bg-white px-3 py-2 text-xs font-mono border border-gray-200 rounded-xl text-gray-600 focus:outline-none select-all"
                                                 />
                                                 <button 
@@ -401,7 +403,7 @@ export default function MinhaAssinatura() {
                                                                         <FileText className="w-3 h-3" />
                                                                         <span>Ver Nota Comprovante</span>
                                                                     </button>
-                                                                    {(fat.recibo_url || fat.recibo_path) && (
+                                                                    {(fat.recibo_url || fat.recibo_path) && String(fat.recibo_url || fat.recibo_path).startsWith('http') && (
                                                                         <a 
                                                                             href={fat.recibo_url || fat.recibo_path} 
                                                                             target="_blank" 
@@ -482,15 +484,22 @@ export default function MinhaAssinatura() {
                         </div>
 
                         {(reciboSelecionado.recibo_url || reciboSelecionado.recibo_path) && (
-                            <a
-                                href={reciboSelecionado.recibo_url || reciboSelecionado.recibo_path}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="w-full py-2.5 px-4 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-bold text-xs flex items-center justify-center gap-2 transition-all"
-                            >
-                                <ExternalLink className="w-3.5 h-3.5" />
-                                <span>Visualizar Comprovante / Anexo Enviado</span>
-                            </a>
+                            String(reciboSelecionado.recibo_url || reciboSelecionado.recibo_path).startsWith('http') ? (
+                                <a
+                                    href={reciboSelecionado.recibo_url || reciboSelecionado.recibo_path}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="w-full py-2.5 px-4 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-bold text-xs flex items-center justify-center gap-2 transition-all"
+                                >
+                                    <ExternalLink className="w-3.5 h-3.5" />
+                                    <span>Visualizar Comprovante / Anexo Enviado</span>
+                                </a>
+                            ) : (
+                                <div className="w-full py-2 px-4 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200 font-bold text-[11px] flex items-center justify-center gap-2">
+                                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                                    <span>Comprovante validado e arquivado com segurança na Torre</span>
+                                </div>
+                            )
                         )}
 
                         <div className="flex gap-2 pt-1">
