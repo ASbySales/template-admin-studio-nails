@@ -86,7 +86,8 @@ Deno.serve(async (req) => {
     }
 
     const torreClient = createClient(TORRE_SUPABASE_URL, TORRE_SUPABASE_ANON_KEY, {
-      auth: { persistSession: false, autoRefreshToken: false }
+      auth: { persistSession: false, autoRefreshToken: false },
+      global: { headers: { Authorization: `Bearer ${torreJwt}` } }
     })
 
     const { data: userData, error: userErr } = await torreClient.auth.getUser(torreJwt)
@@ -95,6 +96,18 @@ Deno.serve(async (req) => {
 
     if (userErr || !user || appRole !== 'admin_master') {
       return new Response(JSON.stringify({ error: 'Acesso negado: usuário não é Admin Master da Torre.' }), {
+        status: 403,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      })
+    }
+
+    // Valida também no banco da Torre a política oficial admin_master_aal2() com o JWT já verificado
+    const { data: isAal2Authorized, error: aal2Err } = await torreClient
+      .schema('torre')
+      .rpc('admin_master_aal2')
+
+    if (aal2Err || isAal2Authorized !== true) {
+      return new Response(JSON.stringify({ error: 'Acesso negado pela política de segurança da Torre (admin_master_aal2).' }), {
         status: 403,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       })
