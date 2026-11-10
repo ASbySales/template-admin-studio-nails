@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { 
@@ -16,18 +16,44 @@ import {
     User,
     Package,
     Lock,
-    CreditCard
+    CreditCard,
+    Inbox,
+    CheckCheck
 } from 'lucide-react'
 import AlbertSalesLogo from '../assets/AlbertSalesLogo.png'
 import BloqueioInadimplencia from '../componentes/BloqueioInadimplencia'
 
+const ABAS_STATUS = [
+    { id: 'pendente', rotulo: 'Pendentes' },
+    { id: 'aprovado', rotulo: 'Aprovados' },
+    { id: 'cumprido', rotulo: 'Cumpridos' },
+    { id: 'negado', rotulo: 'Negados' },
+]
+
+const tempoRelativo = (dataStr) => {
+    if (!dataStr) return ''
+    const seg = Math.floor((Date.now() - new Date(dataStr).getTime()) / 1000)
+    if (seg < 60) return 'agora'
+    if (seg < 3600) return `há ${Math.floor(seg / 60)} min`
+    if (seg < 86400) return `há ${Math.floor(seg / 3600)} h`
+    const dias = Math.floor(seg / 86400)
+    return dias === 1 ? 'ontem' : `há ${dias} dias`
+}
+
 export default function Dashboard() {
     const [solicitacoes, setSolicitacoes] = useState([])
     const [servicos, setServicos] = useState([])
+    const [categorias, setCategorias] = useState([])
+    const [abaAtiva, setAbaAtiva] = useState('pendente')
     const [pesquisa, setPesquisa] = useState('')
     const [loading, setLoading] = useState(true)
     const [editingSolicitacao, setEditingSolicitacao] = useState(null)
     const [toastMessage, setToastMessage] = useState('')
+    
+    // Estados de deslizar (swipe) por card no mobile
+    const [swipeCardId, setSwipeCardId] = useState(null)
+    const [swipeDx, setSwipeDx] = useState(0)
+    const swipeRef = useRef(null)
     
     // Estados do Estabelecimento
     const [activeTenantId, setActiveTenantId] = useState(() => {
@@ -78,7 +104,7 @@ export default function Dashboard() {
             .on(
                 'postgres_changes',
                 { event: 'INSERT', schema: 'public', table: 'solicitacoes_agendamento' },
-                (payload) => {
+                () => {
                     tocarNotificacao()
                     showToast('Nova solicitação de agendamento recebida!')
                     fetchDados()
@@ -139,7 +165,7 @@ export default function Dashboard() {
                 document.title = `${tData.nome} • Painel AS Gestão`
             }
 
-            // 2.5 Busca situação da assinatura do tenant
+            // 2. Busca situação da assinatura do tenant
             const { data: assData } = await supabase
                 .from('assinaturas_tenant')
                 .select('*')
@@ -147,17 +173,17 @@ export default function Dashboard() {
                 .single()
             setAssinatura(assData)
 
-
-            // 3. Busca serviços para cruzar nomes e valores
-            const { data: servicosData, error: errServ } = await supabase
-                .from('servicos')
-                .select('*')
-                .eq('tenant_id', currentTenant)
+            // 3. Busca categorias e serviços para cruzar nomes, valores e adicionais
+            const [{ data: catData }, { data: servicosData, error: errServ }] = await Promise.all([
+                supabase.from('categorias').select('*').eq('tenant_id', currentTenant),
+                supabase.from('servicos').select('*').eq('tenant_id', currentTenant)
+            ])
             
             if (errServ) throw errServ
+            setCategorias(catData || [])
             setServicos(servicosData || [])
 
-            // 4. Busca solicitações com seus respectivos itens aninhados
+            // 4. Busca solicitações com seus respectivos itens aninhados (incluindo preco_unitario congelado)
             const { data: solicitacoesData, error: errSol } = await supabase
                 .from('solicitacoes_agendamento')
                 .select(`
@@ -166,7 +192,8 @@ export default function Dashboard() {
                         id,
                         servico_id,
                         parent_item_id,
-                        quantidade
+                        quantidade,
+                        preco_unitario
                     )
                 `)
                 .eq('tenant_id', currentTenant)
@@ -192,21 +219,18 @@ export default function Dashboard() {
         setTimeout(() => setToastMessage(''), 4000)
     }
 
-    const handleLogOut = async () => {
-        await supabase.auth.signOut()
-        navigate('/login')
-    }
-
     // Altera o status do agendamento via RPC oficial atualizar_status_agendamento (com fallback seguro)
     const handleUpdateStatus = async (id, novoStatus) => {
         try {
+            // Atualização otimista imediata na lista local
+            setSolicitacoes(prev => prev.map(s => s.id === id ? { ...s, status: novoStatus } : s))
+
             const { error: errRpc } = await supabase.rpc('atualizar_status_agendamento', {
                 p_solicitacao_id: id,
                 p_status: novoStatus
             })
 
             if (errRpc) {
-                // Fallback direto na tabela caso a RPC apresente restrição
                 const { error: errUpdate } = await supabase
                     .from('solicitacoes_agendamento')
                     .update({ status: novoStatus })
@@ -216,39 +240,84 @@ export default function Dashboard() {
                 if (errUpdate) throw errUpdate
             }
 
-            // Atualização otimista imediata na lista local
-            setSolicitacoes(prev => prev.map(s => s.id === id ? { ...s, status: novoStatus } : s))
-            showToast(`Status atualizado para "${novoStatus}" com sucesso!`)
+            const rotuloStatus =
+                novoStatus === 'aprovado' ? 'Aprovado' :
+                novoStatus === 'negado' ? 'Negado' :
+                novoStatus === 'cumprido' ? 'Cumprido' : 'Pendente'
+
+            showToast(`Movido para "${rotuloStatus}"!`)
             fetchDados()
         } catch (error) {
             console.error('Erro ao atualizar status:', error)
             showToast('Erro ao atualizar status.')
+            fetchDados()
         }
+    }
+
+    // Gestos de deslizar (swipe) estilo App JK para cards pendentes
+    const handleTouchStartCard = (sol, e) => {
+        if ((sol.status || 'pendente') !== 'pendente') return
+        const t = e.touches?.[0]
+        if (!t) return
+        swipeRef.current = { id: sol.id, x: t.clientX, y: t.clientY, h: null }
+        setSwipeCardId(sol.id)
+        setSwipeDx(0)
+    }
+
+    const handleTouchMoveCard = (sol, e) => {
+        const st = swipeRef.current
+        if (!st || st.id !== sol.id) return
+        const t = e.touches?.[0]
+        if (!t) return
+        const ddx = t.clientX - st.x
+        const ddy = t.clientY - st.y
+        if (st.h === null && (Math.abs(ddx) > 8 || Math.abs(ddy) > 8)) {
+            st.h = Math.abs(ddx) > Math.abs(ddy)
+        }
+        if (st.h) {
+            const v = Math.max(-140, Math.min(140, ddx))
+            setSwipeDx(v)
+        }
+    }
+
+    const handleTouchEndCard = (sol) => {
+        const st = swipeRef.current
+        if (!st || st.id !== sol.id) return
+        if (swipeDx > 90) {
+            handleUpdateStatus(sol.id, 'aprovado')
+        } else if (swipeDx < -90) {
+            handleUpdateStatus(sol.id, 'negado')
+        }
+        swipeRef.current = null
+        setSwipeCardId(null)
+        setSwipeDx(0)
     }
 
     // Calcula o valor total de uma solicitação a partir de seus itens e opcionais em tempo real (fallback)
     const calcularTotalSolicitacaoReal = (sol) => {
         let total = 0
-        if (!sol.itens_agendamento || !servicos.length) return 0
+        if (!sol.itens_agendamento) return 0
 
         const itensPrincipais = sol.itens_agendamento.filter(i => i.parent_item_id === null)
         itensPrincipais.forEach(itemPrincipal => {
             const servPrincipal = servicos.find(s => s.id === itemPrincipal.servico_id)
-            if (!servPrincipal) return
+            const valorBase = servPrincipal
+                ? parseFloat(servPrincipal.valor)
+                : parseFloat(itemPrincipal.preco_unitario || 0)
 
-            let valorBase = parseFloat(servPrincipal.valor)
-            let subtotalItem = valorBase
+            let subtotalItem = valorBase * (itemPrincipal.quantidade || 1)
 
             const opcionais = sol.itens_agendamento.filter(i => i.parent_item_id === itemPrincipal.id)
             opcionais.forEach(opcItem => {
                 const opc = servicos.find(s => s.id === opcItem.servico_id)
-                if (opc && opcItem.quantidade > 0) {
-                    let valorOpc = parseFloat(opc.valor)
-                    if (opc.tipo === 'substitutivo') {
-                        let valorUnidadeSimples = valorBase / 10
-                        subtotalItem += opcItem.quantidade * (valorOpc - valorUnidadeSimples)
+                const qtd = opcItem.quantidade || 0
+                if (qtd > 0) {
+                    const valorOpc = opc ? parseFloat(opc.valor) : parseFloat(opcItem.preco_unitario || 0)
+                    if (opc?.tipo === 'substitutivo') {
+                        const valorUnidadeSimples = valorBase / 10
+                        subtotalItem += qtd * (valorOpc - valorUnidadeSimples)
                     } else {
-                        subtotalItem += opcItem.quantidade * valorOpc
+                        subtotalItem += qtd * valorOpc
                     }
                 }
             })
@@ -302,14 +371,11 @@ export default function Dashboard() {
         setEditWhatsapp(sol.whatsapp_cliente)
         
         // Mapeia os itens da solicitação
-        const itensMapeados = sol.itens_agendamento
+        const itensMapeados = (sol.itens_agendamento || [])
             .filter(i => i.parent_item_id === null)
             .map(itemPrincipal => {
-                const prod = servicos.find(s => s.id === itemPrincipal.servico_id)
-                
-                // Mapeia opcionais vinculados a este principal
                 const opcionaisDoPrincipal = {}
-                sol.itens_agendamento
+                ;(sol.itens_agendamento || [])
                     .filter(i => i.parent_item_id === itemPrincipal.id)
                     .forEach(opc => {
                         opcionaisDoPrincipal[opc.servico_id] = opc.quantidade
@@ -397,14 +463,13 @@ export default function Dashboard() {
             })
 
             if (errRpc) {
-                // Fallback seguro: atualiza cabeçalho e valor_total diretamente em solicitacoes_agendamento
                 const novoTotal = calcularTotalEdicao()
                 const { error: errUpd } = await supabase
                     .from('solicitacoes_agendamento')
                     .update({
                         nome_cliente: editNome.trim(),
                         whatsapp_cliente: editWhatsapp,
-                        valor_total: novoTotal
+                        valor_total: novoTotal > 0 ? novoTotal : editingSolicitacao.valor_total
                     })
                     .eq('id', editingSolicitacao.id)
                     .eq('tenant_id', activeTenantId)
@@ -423,22 +488,43 @@ export default function Dashboard() {
         }
     }
 
-    // Lógica de busca avançada: filtra por Nome, WhatsApp, Serviço Principal ou Adicionais
-    const solicitacoesFiltradas = solicitacoes.filter(sol => {
-        const termo = pesquisa.toLowerCase()
-        
-        // A. Busca no cabeçalho
-        const matchNome = sol.nome_cliente.toLowerCase().includes(termo)
-        const matchTel = sol.whatsapp_cliente.replace(/\D/g, '').includes(termo.replace(/\D/g, ''))
-
-        // B. Busca nos Serviços Principais
-        const matchServicos = sol.itens_agendamento.some(item => {
-            const serv = servicos.find(s => s.id === item.servico_id)
-            return serv && serv.nome.toLowerCase().includes(termo)
+    // Contagem de pedidos por status para exibir nos chips das abas (igual ao App JK)
+    const contagemPorStatus = useMemo(() => {
+        const cont = { pendente: 0, aprovado: 0, cumprido: 0, negado: 0 }
+        solicitacoes.forEach(s => {
+            const st = s.status || 'pendente'
+            cont[st] = (cont[st] || 0) + 1
         })
+        return cont
+    }, [solicitacoes])
 
-        return matchNome || matchTel || matchServicos
-    })
+    // Filtra por Aba Ativa (Pendentes / Aprovados / Cumpridos / Negados) + Busca por Nome, WhatsApp ou Serviço
+    const solicitacoesFiltradas = useMemo(() => {
+        const termo = pesquisa.toLowerCase().trim()
+        const digitosBusca = termo.replace(/\D/g, '')
+
+        return solicitacoes.filter(sol => {
+            const statusAtual = sol.status || 'pendente'
+            if (statusAtual !== abaAtiva) return false
+            if (!termo) return true
+
+            const matchNome = (sol.nome_cliente || '').toLowerCase().includes(termo)
+            const matchTel = digitosBusca.length > 0 && (sol.whatsapp_cliente || '').replace(/\D/g, '').includes(digitosBusca)
+
+            const matchServicos = (sol.itens_agendamento || []).some(item => {
+                const serv = servicos.find(s => s.id === item.servico_id)
+                return serv && serv.nome.toLowerCase().includes(termo)
+            })
+
+            return matchNome || matchTel || matchServicos
+        })
+    }, [solicitacoes, servicos, abaAtiva, pesquisa])
+
+    // Lista de opcionais disponíveis para o modal de edição
+    const opcionaisDisponiveis = useMemo(() => {
+        const idsCatOcultas = new Set(categorias.filter(c => c.escolha === false).map(c => c.id))
+        return servicos.filter(s => (idsCatOcultas.has(s.categoria_id) || s.tipo !== null))
+    }, [servicos, categorias])
 
     // Se o estabelecimento estiver bloqueado ou com vencimento + 3 dias de tolerância expirados (respeitando isenção/cortesia e adiamento vigente), exibe tela de cobrança e bloqueio do painel
     const hojeBrasil = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' })
@@ -467,7 +553,7 @@ export default function Dashboard() {
     }
 
     return (
-        <div className="min-h-screen w-full bg-gray-50 flex flex-col font-sans">
+        <div className="min-h-screen w-full bg-[#FAF6F4] flex flex-col font-sans">
             
             {/* Toast de Notificação flutuante */}
             {toastMessage && (
@@ -477,18 +563,22 @@ export default function Dashboard() {
                 </div>
             )}
 
-            {/* Topbar Administrativo Profissional */}
-            <header className="w-full bg-white border-b border-gray-100 px-4 py-3 flex justify-between items-center shadow-xs">
-                <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-xl border border-[#C5A059]/40 bg-[#0F172A] shadow-xs overflow-hidden flex justify-center items-center">
+            {/* Topbar Administrativo Estilo App JK */}
+            <header className="w-full bg-white/95 backdrop-blur border-b border-gray-100 px-4 py-3 flex justify-between items-center shadow-2xs sticky top-0 z-20">
+                <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-9 h-9 rounded-full border border-[#C5A059]/40 bg-[#0F172A] shadow-xs overflow-hidden flex justify-center items-center shrink-0">
                         <img className="w-full h-full object-cover" src={AlbertSalesLogo} alt="Logo AS Gestão" />
                     </div>
-                    <div className="text-left font-cinzel">
-                        <h1 className="text-xs font-bold text-gray-900 tracking-wider">AS GESTÃO</h1>
-                        <span className="text-[9px] block font-sans font-bold text-gray-400 leading-none">PAINEL DE AGENDAMENTOS</span>
+                    <div className="text-left min-w-0">
+                        <span className="text-[9px] block font-sans font-bold tracking-[0.16em] text-gray-400 uppercase truncate">
+                            {tenantInfo?.nome || 'AS GESTÃO'}
+                        </span>
+                        <h1 className="text-base sm:text-lg font-cinzel font-bold text-gray-900 leading-none tracking-wide">
+                            SOLICITAÇÕES
+                        </h1>
                     </div>
                 </div>
-                <div className="flex items-center gap-2 sm:gap-3">
+                <div className="flex items-center gap-1.5 sm:gap-2.5">
                     {/* Seletor ou Badge do Estabelecimento Vinculado */}
                     {userTenants.length > 1 ? (
                         <div className="bg-[#C5A059]/10 border border-[#C5A059]/30 rounded-xl px-2.5 py-1 flex items-center gap-1.5">
@@ -496,7 +586,7 @@ export default function Dashboard() {
                             <select
                                 value={activeTenantId}
                                 onChange={(e) => handleTrocarTenant(e.target.value)}
-                                className="bg-transparent text-xs font-bold text-[#C5A059] focus:outline-none cursor-pointer max-w-[130px] sm:max-w-none"
+                                className="bg-transparent text-xs font-bold text-[#C5A059] focus:outline-none cursor-pointer max-w-[110px] sm:max-w-none"
                                 title="Alternar entre estabelecimentos autorizados"
                             >
                                 {userTenants.map((v) => (
@@ -507,9 +597,9 @@ export default function Dashboard() {
                             </select>
                         </div>
                     ) : (
-                        <div className="bg-[#C5A059]/10 border border-[#C5A059]/30 text-[#C5A059] px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5">
+                        <div className="hidden md:flex bg-[#C5A059]/10 border border-[#C5A059]/30 text-[#C5A059] px-3 py-1.5 rounded-xl text-xs font-bold items-center gap-1.5">
                             <span>{tenantInfo?.segmento === 'nail_design' ? '💅' : '🌸'}</span>
-                            <span className="max-w-[130px] sm:max-w-none truncate">{tenantInfo?.nome || 'Estabelecimento Ativo'}</span>
+                            <span className="max-w-[150px] truncate">{tenantInfo?.nome || 'Estabelecimento Ativo'}</span>
                         </div>
                     )}
 
@@ -548,184 +638,301 @@ export default function Dashboard() {
             </header>
 
             {/* Dashboard Container */}
-            <main className="flex-1 max-w-[1200px] w-full mx-auto p-3.5 md:p-6 flex flex-col gap-4">
+            <main className="flex-1 max-w-[1100px] w-full mx-auto p-3.5 md:p-6 flex flex-col gap-3.5">
                 
-                {/* Filtros e Busca Compacto */}
-                <div className="w-full flex flex-col gap-2 bg-white p-3 rounded-2xl shadow-2xs border border-gray-100">
+                {/* Abas de Status (Pendentes | Aprovados | Cumpridos | Negados) estilo App JK */}
+                <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-0.5">
+                    {ABAS_STATUS.map((aba) => {
+                        const ativo = abaAtiva === aba.id
+                        const qtd = contagemPorStatus[aba.id] || 0
+                        return (
+                            <button
+                                key={aba.id}
+                                type="button"
+                                onClick={() => setAbaAtiva(aba.id)}
+                                className={`shrink-0 h-9 px-4 rounded-full text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 active:scale-95 ${
+                                    ativo
+                                        ? 'bg-[#B38280] text-white shadow-sm'
+                                        : 'bg-white text-gray-700 border border-[#E8D5D3]'
+                                }`}
+                            >
+                                <span>{aba.rotulo}</span>
+                                {qtd > 0 && (
+                                    <span className={`text-[11px] font-extrabold ${ativo ? 'text-white/90' : 'text-gray-400'}`}>
+                                        {qtd}
+                                    </span>
+                                )}
+                            </button>
+                        )
+                    })}
+                </div>
+
+                {/* Campo de Busca Estilo App JK */}
+                <div className="w-full flex flex-col gap-1.5">
                     <div className="relative w-full">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-3.5 h-3.5" />
+                        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
                         <input 
                             type="text"
-                            placeholder="Buscar cliente, telefone ou serviço..."
+                            placeholder="Buscar cliente, telefone ou serviço"
                             value={pesquisa}
                             onChange={(e) => setPesquisa(e.target.value)}
-                            className="w-full pl-8 pr-4 py-1.5 border border-gray-200 rounded-xl focus:outline-none focus:border-[#C5A059] text-xs"
+                            className="w-full pl-10 pr-4 py-2.5 bg-white border border-[#E8D5D3] rounded-2xl focus:outline-none focus:border-[#B38280] text-xs sm:text-sm text-gray-800 shadow-2xs"
                         />
                     </div>
-                    <div className="flex items-center justify-between text-[9px] font-semibold text-gray-400 px-1">
-                        <span className="flex items-center gap-1">
-                            <Database className="w-3 h-3 text-green-500 animate-pulse" />
-                            Realtime Conectado
-                        </span>
-                        <span>{solicitacoesFiltradas.length} agendamentos</span>
+                    <div className="flex items-center justify-between text-[10px] font-semibold text-gray-400 px-1">
+                        {abaAtiva === 'pendente' ? (
+                            <span>Dica: deslize o card → para aprovar ou ← para negar</span>
+                        ) : (
+                            <span className="flex items-center gap-1">
+                                <Database className="w-3 h-3 text-emerald-500 animate-pulse" />
+                                Realtime Conectado
+                            </span>
+                        )}
+                        <span>{solicitacoesFiltradas.length} {solicitacoesFiltradas.length === 1 ? 'solicitação' : 'solicitações'}</span>
                     </div>
                 </div>
 
-                {/* Fila de Cards de Agendamento */}
+                {/* Fila de Cards da Aba Selecionada */}
                 {loading ? (
                     <div className="flex-1 flex flex-col items-center justify-center py-20 gap-2">
-                        <div className="w-8 h-8 border-3 border-[#C5A059]/20 border-t-[#C5A059] rounded-full animate-spin"></div>
-                        <p className="text-xs text-gray-400 font-semibold font-cinzel">Carregando agendamentos...</p>
+                        <div className="w-8 h-8 border-3 border-[#B38280]/20 border-t-[#B38280] rounded-full animate-spin"></div>
+                        <p className="text-xs text-gray-400 font-semibold font-cinzel">Carregando solicitações...</p>
                     </div>
                 ) : solicitacoesFiltradas.length === 0 ? (
-                    <div className="bg-white rounded-3xl p-8 flex flex-col items-center justify-center text-center border border-gray-100 shadow-sm gap-2">
-                        <Calendar className="w-10 h-10 text-[#C5A059]/30" />
-                        <p className="font-semibold text-xs text-gray-500">Nenhum agendamento encontrado</p>
-                        <p className="text-[10px] text-gray-400">As novas solicitações enviadas pelas clientes aparecerão aqui em tempo real.</p>
+                    <div className="bg-white rounded-3xl p-10 flex flex-col items-center justify-center text-center border border-[#EFE3E1] shadow-2xs gap-2 my-2">
+                        <div className="w-14 h-14 rounded-full bg-[#F8EDEB] flex items-center justify-center mb-1">
+                            {abaAtiva === 'pendente' ? (
+                                <Inbox className="w-6 h-6 text-[#B38280]" />
+                            ) : (
+                                <CheckCheck className="w-6 h-6 text-[#B38280]" />
+                            )}
+                        </div>
+                        <p className="font-bold text-sm text-gray-700">
+                            {pesquisa
+                                ? 'Nada encontrado para esta busca'
+                                : abaAtiva === 'pendente'
+                                ? 'Tudo em dia!'
+                                : `Nenhuma solicitação em "${ABAS_STATUS.find(a => a.id === abaAtiva)?.rotulo}"`}
+                        </p>
+                        <p className="text-xs text-gray-400 max-w-xs">
+                            {abaAtiva === 'pendente' && !pesquisa
+                                ? 'Novas solicitações enviadas pelos clientes aparecem aqui em tempo real.'
+                                : 'Altere a aba acima para visualizar solicitações com outros status.'}
+                        </p>
                     </div>
                 ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {solicitacoesFiltradas.map((sol) => (
-                            <div 
-                                key={sol.id} 
-                                className={`bg-white rounded-2xl border p-3.5 shadow-2xs relative flex flex-col justify-between gap-3 transition-all hover:shadow-xs ${
-                                    sol.status === 'aprovado' ? 'border-green-100 bg-green-50/5' :
-                                    sol.status === 'negado' ? 'border-red-100 bg-red-50/5' :
-                                    sol.status === 'cumprido' ? 'border-blue-100 bg-blue-50/5' : 'border-yellow-100 bg-yellow-50/5'
-                                }`}
-                            >
-                                {/* Header do Card (Código e Data) */}
-                                <div className="flex justify-between items-center">
-                                    <span className="text-[10px] font-bold text-gray-400 font-mono">#0{String(sol.codigo_pedido ?? sol.id).padStart(2, '0')}</span>
-                                    <span className="text-[9px] text-gray-400 font-semibold bg-gray-50 border border-gray-100 rounded-full px-2 py-0.5 shadow-3xs">
-                                        {new Date(sol.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
-                                    </span>
-                                </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                        {solicitacoesFiltradas.map((sol) => {
+                            const statusAtual = sol.status || 'pendente'
+                            const isNovo = statusAtual === 'pendente' && (Date.now() - new Date(sol.created_at).getTime() < 12 * 3600 * 1000)
+                            const dxAtual = swipeCardId === sol.id ? swipeDx : 0
+                            const itensPrincipais = (sol.itens_agendamento || []).filter(i => i.parent_item_id === null)
 
-                                {/* Corpo do Card (Cliente e Contato) */}
-                                <div className="flex flex-col gap-1 text-left">
-                                    <div className="flex items-center gap-1.5">
-                                        <User className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
-                                        <span className="font-bold text-gray-800 text-xs truncate">{sol.nome_cliente}</span>
-                                    </div>
-                                    <a 
-                                        href={`https://wa.me/55${sol.whatsapp_cliente.replace(/\D/g, '')}`} 
-                                        target="_blank" 
-                                        rel="noopener noreferrer"
-                                        className="flex items-center gap-1.5 text-[11px] text-[#C5A059] hover:underline font-semibold w-max"
+                            return (
+                                <div key={sol.id} className="relative">
+                                    {/* Fundo revelado ao deslizar (swipe) em Pendentes */}
+                                    {statusAtual === 'pendente' && dxAtual !== 0 && (
+                                        <div
+                                            className={`absolute inset-0 rounded-3xl flex items-center px-6 ${
+                                                dxAtual > 0 ? 'bg-emerald-500 justify-start' : 'bg-red-500 justify-end'
+                                            }`}
+                                        >
+                                            <span className="text-white font-bold text-xs flex items-center gap-1.5">
+                                                {dxAtual > 0 ? (
+                                                    <>
+                                                        <Check className="w-4 h-4" /> Aprovar
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        Negar <X className="w-4 h-4" />
+                                                    </>
+                                                )}
+                                            </span>
+                                        </div>
+                                    )}
+
+                                    <article
+                                        onTouchStart={(e) => handleTouchStartCard(sol, e)}
+                                        onTouchMove={(e) => handleTouchMoveCard(sol, e)}
+                                        onTouchEnd={() => handleTouchEndCard(sol)}
+                                        style={{
+                                            transform: `translateX(${dxAtual}px)`,
+                                            transition: dxAtual ? 'none' : 'transform .25s'
+                                        }}
+                                        className="bg-white rounded-3xl border border-[#EFE3E1] p-4 shadow-2xs relative flex flex-col justify-between gap-3 transition-shadow hover:shadow-xs text-left"
                                     >
-                                        <Phone className="w-3 h-3 text-[#C5A059]/70" />
-                                        <span>{sol.whatsapp_cliente}</span>
-                                    </a>
-                                </div>
-
-                                {/* Itens Escolhidos */}
-                                <div className="border-t border-b border-gray-100/70 py-2 flex flex-col gap-1.5 text-left">
-                                    {sol.itens_agendamento
-                                        .filter(i => i.parent_item_id === null)
-                                        .map((itemPrincipal) => {
-                                            const serv = servicos.find(s => s.id === itemPrincipal.servico_id)
-                                            if (!serv) return null
-
-                                            return (
-                                                <div key={itemPrincipal.id} className="flex flex-col gap-0.5">
-                                                    <span className="text-xs font-bold text-gray-700">{serv.nome}</span>
-                                                    
-                                                    {/* Opcionais vinculados */}
-                                                    {sol.itens_agendamento.some(i => i.parent_item_id === itemPrincipal.id) && (
-                                                        <div className="pl-2 flex flex-col gap-0.5 border-l-2 border-dashed border-gray-200">
-                                                            {sol.itens_agendamento
-                                                                .filter(i => i.parent_item_id === itemPrincipal.id)
-                                                                .map((opcItem) => {
-                                                                    const opc = servicos.find(s => s.id === opcItem.servico_id)
-                                                                    if (!opc) return null
-                                                                    return (
-                                                                        <span key={opcItem.id} className="text-[10px] text-gray-400 font-medium">
-                                                                            + {opc.nome} ({opcItem.quantidade}x)
-                                                                        </span>
-                                                                    )
-                                                                })}
-                                                        </div>
+                                        {/* Topo do Card: Nome + Badge NOVO e Tempo Relativo */}
+                                        <div className="flex items-start justify-between gap-2">
+                                            <div className="min-w-0 flex-1">
+                                                <div className="flex items-center gap-2">
+                                                    <h3 className="font-bold text-[15px] text-gray-900 truncate">
+                                                        {sol.nome_cliente}
+                                                    </h3>
+                                                    {isNovo && (
+                                                        <span className="text-[9px] font-extrabold tracking-wider bg-[#B38280] text-white rounded-full px-2 py-0.5 uppercase shrink-0">
+                                                            NOVO
+                                                        </span>
                                                     )}
                                                 </div>
-                                            )
-                                        })}
+
+                                                {/* Contato WhatsApp clicável */}
+                                                <a 
+                                                    href={`https://wa.me/55${(sol.whatsapp_cliente || '').replace(/\D/g, '')}`} 
+                                                    target="_blank" 
+                                                    rel="noopener noreferrer"
+                                                    className="inline-flex items-center gap-1 text-[11px] text-[#B38280] hover:underline font-semibold mt-0.5"
+                                                >
+                                                    <Phone className="w-3 h-3" />
+                                                    <span>{sol.whatsapp_cliente}</span>
+                                                </a>
+                                            </div>
+
+                                            <div className="flex flex-col items-end shrink-0">
+                                                <span className="text-[11px] text-gray-400 font-medium">
+                                                    {tempoRelativo(sol.created_at)}
+                                                </span>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleOpenEditModal(sol)}
+                                                    className="mt-1 text-[10px] text-gray-400 hover:text-gray-700 flex items-center gap-0.5 cursor-pointer"
+                                                    title="Editar pedido"
+                                                >
+                                                    <Edit3 className="w-3 h-3" />
+                                                    <span>Editar</span>
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        {/* Resumo dos Serviços / Produtos Escolhidos */}
+                                        <div className="flex flex-col gap-1 text-left">
+                                            {itensPrincipais.length === 0 ? (
+                                                <span className="text-xs text-gray-400 italic">Itens do pedido</span>
+                                            ) : (
+                                                itensPrincipais.map((itemPrincipal) => {
+                                                    const serv = servicos.find(s => s.id === itemPrincipal.servico_id)
+                                                    const nomeItem = serv ? serv.nome : `Item #${itemPrincipal.servico_id}`
+                                                    const opcionais = (sol.itens_agendamento || []).filter(i => i.parent_item_id === itemPrincipal.id)
+
+                                                    return (
+                                                        <div key={itemPrincipal.id} className="flex flex-col gap-0.5">
+                                                            <span className="text-[13px] text-gray-600 font-medium">
+                                                                {nomeItem}
+                                                            </span>
+                                                            {opcionais.length > 0 && (
+                                                                <div className="pl-2.5 flex flex-col gap-0.5 border-l-2 border-dashed border-gray-200">
+                                                                    {opcionais.map((opcItem) => {
+                                                                        const opc = servicos.find(s => s.id === opcItem.servico_id)
+                                                                        const nomeOpc = opc ? opc.nome : `Adicional #${opcItem.servico_id}`
+                                                                        return (
+                                                                            <span key={opcItem.id} className="text-[11px] text-gray-400">
+                                                                                + {nomeOpc} ({opcItem.quantidade}x)
+                                                                            </span>
+                                                                        )
+                                                                    })}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    )
+                                                })
+                                            )}
+                                        </div>
+
+                                        {/* Valor Total e Selo de Status (igual à foto do App JK) */}
+                                        <div className="flex items-center justify-between pt-0.5">
+                                            <span className="font-bold text-[#945B59] text-[17px]">
+                                                R$ {exibirValorTotal(sol).toFixed(2).replace('.', ',')}
+                                            </span>
+                                            <span className={`text-[10px] font-bold rounded-full px-3 py-1 uppercase tracking-wider border ${
+                                                statusAtual === 'aprovado' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                                                statusAtual === 'negado' ? 'bg-red-50 text-red-600 border-red-200' :
+                                                statusAtual === 'cumprido' ? 'bg-sky-50 text-sky-700 border-sky-200' :
+                                                'bg-amber-50/80 text-amber-800 border-amber-200'
+                                            }`}>
+                                                {statusAtual === 'aprovado' ? 'APROVADO' :
+                                                 statusAtual === 'negado' ? 'NEGADO' :
+                                                 statusAtual === 'cumprido' ? 'CUMPRIDO' : 'PENDENTE'}
+                                            </span>
+                                        </div>
+
+                                        {/* Botões de Ação por Aba (Layout idêntico ao App JK) */}
+                                        {statusAtual === 'pendente' && (
+                                            <div className="grid grid-cols-2 gap-2.5 pt-1">
+                                                <button 
+                                                    type="button"
+                                                    onClick={() => handleUpdateStatus(sol.id, 'negado')}
+                                                    className="py-2.5 px-3 rounded-2xl bg-[#FDECEC] hover:bg-[#fbdADA] text-[#B43C3C] flex items-center justify-center gap-1.5 text-xs font-bold transition-all active:scale-95 cursor-pointer"
+                                                >
+                                                    <X className="w-4 h-4" />
+                                                    <span>Negar</span>
+                                                </button>
+                                                <button 
+                                                    type="button"
+                                                    onClick={() => handleUpdateStatus(sol.id, 'aprovado')}
+                                                    className="py-2.5 px-3 rounded-2xl bg-[#E7F6ED] hover:bg-[#d5f0e0] text-[#1E7A46] flex items-center justify-center gap-1.5 text-xs font-bold transition-all active:scale-95 cursor-pointer"
+                                                >
+                                                    <Check className="w-4 h-4" />
+                                                    <span>Aprovar</span>
+                                                </button>
+                                            </div>
+                                        )}
+
+                                        {statusAtual === 'aprovado' && (
+                                            <div className="grid grid-cols-2 gap-2 pt-1">
+                                                <button 
+                                                    type="button"
+                                                    onClick={() => handleUpdateStatus(sol.id, 'cumprido')}
+                                                    className="py-2.5 px-3 rounded-2xl bg-[#E7F6ED] hover:bg-[#d5f0e0] text-[#1E7A46] flex items-center justify-center gap-1.5 text-xs font-bold transition-all active:scale-95 cursor-pointer"
+                                                >
+                                                    <CheckSquare className="w-4 h-4" />
+                                                    <span>Cumprir / Concluir</span>
+                                                </button>
+                                                <div className="grid grid-cols-2 gap-1.5">
+                                                    <button 
+                                                        type="button"
+                                                        onClick={() => handleUpdateStatus(sol.id, 'negado')}
+                                                        className="py-2.5 px-2 rounded-2xl bg-[#FDECEC] hover:bg-[#fbdADA] text-[#B43C3C] flex items-center justify-center gap-1 text-[11px] font-bold transition-all active:scale-95 cursor-pointer"
+                                                        title="Mover para Negados"
+                                                    >
+                                                        <X className="w-3.5 h-3.5" />
+                                                        <span>Negar</span>
+                                                    </button>
+                                                    <button 
+                                                        type="button"
+                                                        onClick={() => handleUpdateStatus(sol.id, 'pendente')}
+                                                        className="py-2.5 px-2 rounded-2xl bg-amber-50 hover:bg-amber-100 text-amber-800 flex items-center justify-center gap-1 text-[11px] font-bold transition-all active:scale-95 cursor-pointer"
+                                                        title="Voltar para Pendentes"
+                                                    >
+                                                        <Slash className="w-3 h-3" />
+                                                        <span>Voltar</span>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {(statusAtual === 'cumprido' || statusAtual === 'negado') && (
+                                            <div className="grid grid-cols-2 gap-2 pt-1">
+                                                <button 
+                                                    type="button"
+                                                    onClick={() => handleUpdateStatus(sol.id, 'pendente')}
+                                                    className="py-2 px-3 rounded-2xl bg-amber-50 hover:bg-amber-100 text-amber-800 flex items-center justify-center gap-1.5 text-xs font-bold transition-all active:scale-95 cursor-pointer"
+                                                >
+                                                    <Slash className="w-3.5 h-3.5" />
+                                                    <span>Voltar p/ Pendente</span>
+                                                </button>
+                                                <button 
+                                                    type="button"
+                                                    onClick={() => handleUpdateStatus(sol.id, 'aprovado')}
+                                                    className="py-2 px-3 rounded-2xl bg-[#E7F6ED] hover:bg-[#d5f0e0] text-[#1E7A46] flex items-center justify-center gap-1.5 text-xs font-bold transition-all active:scale-95 cursor-pointer"
+                                                >
+                                                    <Check className="w-3.5 h-3.5" />
+                                                    <span>Aprovar</span>
+                                                </button>
+                                            </div>
+                                        )}
+                                    </article>
                                 </div>
-
-                                {/* Preço e Status Atual */}
-                                <div className="flex justify-between items-center">
-                                    <div className="flex flex-col text-left">
-                                        <span className="text-[9px] text-gray-400 font-bold uppercase tracking-wider leading-none">Subtotal</span>
-                                        <span className="text-sm font-bold text-[#C5A059] mt-0.5">R$ {exibirValorTotal(sol).toFixed(2).replace('.', ',')}</span>
-                                    </div>
-                                    <span className={`text-[9px] font-bold rounded-full px-2.5 py-0.5 uppercase tracking-wider ${
-                                        sol.status === 'aprovado' ? 'bg-green-50 text-green-700 border border-green-200' :
-                                        sol.status === 'negado' ? 'bg-red-50 text-red-700 border border-red-200' :
-                                        sol.status === 'cumprido' ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'bg-yellow-50 text-yellow-700 border border-yellow-200'
-                                    }`}>
-                                        {sol.status === 'aprovado' ? 'Aprovado' :
-                                         sol.status === 'negado' ? 'Negado' :
-                                         sol.status === 'cumprido' ? 'Cumprido' : 'Pendente'}
-                                    </span>
-                                </div>
-
-                                {/* Barra de Ações Rápidas com Nomes e Ícones Claros */}
-                                <div className="border-t border-gray-100 pt-2.5 flex flex-wrap gap-1.5 justify-end">
-                                    <button 
-                                        onClick={() => handleOpenEditModal(sol)}
-                                        className="px-2 py-1 rounded-lg bg-gray-50 hover:bg-gray-100 flex items-center gap-1 text-gray-600 border border-gray-200/80 text-[11px] font-semibold transition-colors cursor-pointer"
-                                        title="Editar agendamento"
-                                    >
-                                        <Edit3 className="w-3 h-3" />
-                                        <span>Editar</span>
-                                    </button>
-
-                                    {sol.status !== 'aprovado' && sol.status !== 'cumprido' && (
-                                        <button 
-                                            onClick={() => handleUpdateStatus(sol.id, 'aprovado')}
-                                            className="px-2.5 py-1 rounded-lg bg-green-50 hover:bg-green-100 text-green-700 border border-green-200 flex items-center gap-1 text-[11px] font-bold transition-colors cursor-pointer"
-                                            title="Aprovar agendamento"
-                                        >
-                                            <Check className="w-3.5 h-3.5" />
-                                            <span>Aprovar</span>
-                                        </button>
-                                    )}
-
-                                    {sol.status !== 'negado' && sol.status !== 'cumprido' && (
-                                        <button 
-                                            onClick={() => handleUpdateStatus(sol.id, 'negado')}
-                                            className="px-2.5 py-1 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 flex items-center gap-1 text-[11px] font-bold transition-colors cursor-pointer"
-                                            title="Recusar agendamento"
-                                        >
-                                            <X className="w-3.5 h-3.5" />
-                                            <span>Recusar</span>
-                                        </button>
-                                    )}
-
-                                    {sol.status === 'aprovado' && (
-                                        <button 
-                                            onClick={() => handleUpdateStatus(sol.id, 'cumprido')}
-                                            className="px-2.5 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 flex items-center gap-1 text-[11px] font-bold transition-colors cursor-pointer"
-                                            title="Marcar como Concluído / Atendido"
-                                        >
-                                            <CheckSquare className="w-3.5 h-3.5" />
-                                            <span>Concluir</span>
-                                        </button>
-                                    )}
-
-                                    {(sol.status === 'aprovado' || sol.status === 'negado' || sol.status === 'cumprido') && (
-                                        <button 
-                                            onClick={() => handleUpdateStatus(sol.id, 'pendente')}
-                                            className="px-2 py-1 rounded-lg bg-yellow-50 hover:bg-yellow-100 text-yellow-700 border border-yellow-200 flex items-center gap-1 text-[11px] font-semibold transition-colors cursor-pointer"
-                                            title="Retornar para Pendente"
-                                        >
-                                            <Slash className="w-3 h-3" />
-                                            <span>Pendente</span>
-                                        </button>
-                                    )}
-                                </div>
-                            </div>
-                        ))}
+                            )
+                        })}
                     </div>
                 )}
             </main>
@@ -744,7 +951,7 @@ export default function Dashboard() {
                             >
                                 ✕
                             </button>
-                            <h2 className="text-sm font-cinzel font-bold text-gray-800 tracking-wide">Editar Agendamento</h2>
+                            <h2 className="text-sm font-cinzel font-bold text-gray-800 tracking-wide">Editar Solicitação</h2>
                             <div className="w-7 h-7"></div>
                         </div>
 
@@ -774,41 +981,45 @@ export default function Dashboard() {
                                 <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Itens e Opcionais</h3>
                                 {editItens.map((item) => {
                                     const serv = servicos.find(s => s.id === item.servico_id)
-                                    if (!serv) return null
+                                    const nomePrincipal = serv ? serv.nome : `Item #${item.servico_id}`
 
                                     return (
                                         <div key={item.idInterno} className="bg-gray-50 rounded-2xl p-2.5 border border-gray-200/60 flex flex-col gap-2">
-                                            <span className="text-[11px] font-bold text-gray-800">{serv.nome}</span>
+                                            <span className="text-[11px] font-bold text-gray-800">{nomePrincipal}</span>
                                             
                                             {/* Opcionais/Adicionais da Categoria */}
                                             <div className="flex flex-col gap-1.5">
-                                                {servicos.filter(s => s.categoria_id === 2 || s.tipo !== null).map((opc) => {
-                                                    const qtd = item.opcionais[opc.id] || 0
+                                                {opcionaisDisponiveis
+                                                    .filter(opc => !opc.arquivado || (item.opcionais[opc.id] || 0) > 0)
+                                                    .map((opc) => {
+                                                        const qtd = item.opcionais[opc.id] || 0
 
-                                                    return (
-                                                        <div key={opc.id} className="flex justify-between items-center bg-white rounded-xl px-2 py-1 border border-gray-100/60">
-                                                            <div className="flex flex-col text-left">
-                                                                <span className="text-[11px] text-gray-700 font-bold leading-tight">{opc.nome}</span>
-                                                                <span className="text-[9px] text-gray-400 leading-none">R$ {opc.valor}</span>
+                                                        return (
+                                                            <div key={opc.id} className="flex justify-between items-center bg-white rounded-xl px-2 py-1 border border-gray-100/60">
+                                                                <div className="flex flex-col text-left">
+                                                                    <span className="text-[11px] text-gray-700 font-bold leading-tight">{opc.nome}</span>
+                                                                    <span className="text-[9px] text-gray-400 leading-none">R$ {opc.valor}</span>
+                                                                </div>
+                                                                <div className="flex items-center gap-1.5">
+                                                                    <button 
+                                                                        type="button"
+                                                                        onClick={() => handleAlterarOpcionalModal(item.idInterno, opc.id, 'menos')}
+                                                                        className="h-5 w-5 bg-gray-100 hover:bg-gray-200 rounded-full flex justify-center items-center font-bold text-[11px] cursor-pointer"
+                                                                    >
+                                                                        -
+                                                                    </button>
+                                                                    <span className="font-bold text-xs w-4 text-center">{qtd}</span>
+                                                                    <button 
+                                                                        type="button"
+                                                                        onClick={() => handleAlterarOpcionalModal(item.idInterno, opc.id, 'mais')}
+                                                                        className="h-5 w-5 bg-gray-100 hover:bg-gray-200 rounded-full flex justify-center items-center font-bold text-[11px] cursor-pointer"
+                                                                    >
+                                                                        +
+                                                                    </button>
+                                                                </div>
                                                             </div>
-                                                            <div className="flex items-center gap-1.5">
-                                                                <button 
-                                                                    onClick={() => handleAlterarOpcionalModal(item.idInterno, opc.id, 'menos')}
-                                                                    className="h-5 w-5 bg-gray-100 hover:bg-gray-200 rounded-full flex justify-center items-center font-bold text-[11px] cursor-pointer"
-                                                                >
-                                                                    -
-                                                                </button>
-                                                                <span className="font-bold text-xs w-4 text-center">{qtd}</span>
-                                                                <button 
-                                                                    onClick={() => handleAlterarOpcionalModal(item.idInterno, opc.id, 'mais')}
-                                                                    className="h-5 w-5 bg-gray-100 hover:bg-gray-200 rounded-full flex justify-center items-center font-bold text-[11px] cursor-pointer"
-                                                                >
-                                                                    +
-                                                                </button>
-                                                            </div>
-                                                        </div>
-                                                    )
-                                                })}
+                                                        )
+                                                    })}
                                             </div>
                                         </div>
                                     )

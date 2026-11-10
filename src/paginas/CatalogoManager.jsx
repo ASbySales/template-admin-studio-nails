@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { 
@@ -13,10 +13,168 @@ import {
     Layers,
     ArrowUp,
     ArrowDown,
-    CreditCard
+    CreditCard,
+    RotateCw,
+    ZoomIn,
+    Check
 } from 'lucide-react'
 import AlbertSalesLogo from '../assets/AlbertSalesLogo.png'
 import BloqueioInadimplencia from '../componentes/BloqueioInadimplencia'
+
+const ordenarItens = (a, b) => ((a.ordem ?? 999999) - (b.ordem ?? 999999)) || (a.id - b.id)
+
+const blobParaDataUrl = (blob) => new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onloadend = () => resolve(reader.result)
+    reader.onerror = reject
+    reader.readAsDataURL(blob)
+})
+
+// Modal de corte interativo 1:1 (quadrado automático)
+function ModalRecorte1x1({ src, aoCancelar, aoConfirmar }) {
+    const [imgEl, setImgEl] = useState(null)
+    const [zoom, setZoom] = useState(1)
+    const [rotacao, setRotacao] = useState(0)
+    const [offset, setOffset] = useState({ x: 0, y: 0 })
+    const arrastando = useRef(null)
+    const TAM_VIEW = 260
+
+    useEffect(() => {
+        const im = new window.Image()
+        im.crossOrigin = 'anonymous'
+        im.onload = () => {
+            setImgEl(im)
+            setZoom(1)
+            setRotacao(0)
+            setOffset({ x: 0, y: 0 })
+        }
+        im.src = src
+    }, [src])
+
+    const escalaBase = () => {
+        if (!imgEl) return 1
+        const w = rotacao % 180 === 0 ? imgEl.width : imgEl.height
+        const h = rotacao % 180 === 0 ? imgEl.height : imgEl.width
+        return Math.max(TAM_VIEW / w, TAM_VIEW / h)
+    }
+
+    const iniciarArraste = (clientX, clientY) => {
+        arrastando.current = { x: clientX - offset.x, y: clientY - offset.y }
+    }
+    const moverArraste = (clientX, clientY) => {
+        if (!arrastando.current) return
+        setOffset({
+            x: clientX - arrastando.current.x,
+            y: clientY - arrastando.current.y
+        })
+    }
+    const pararArraste = () => { arrastando.current = null }
+
+    const confirmarRecorte = () => {
+        if (!imgEl) return
+        const SAIDA = 720
+        const canvas = document.createElement('canvas')
+        canvas.width = SAIDA
+        canvas.height = SAIDA
+        const ctx = canvas.getContext('2d')
+        ctx.fillStyle = '#FFFFFF'
+        ctx.fillRect(0, 0, SAIDA, SAIDA)
+
+        const fator = SAIDA / TAM_VIEW
+        const esc = escalaBase() * zoom * fator
+
+        ctx.save()
+        ctx.translate(SAIDA / 2 + offset.x * fator, SAIDA / 2 + offset.y * fator)
+        ctx.rotate((rotacao * Math.PI) / 180)
+        ctx.scale(esc, esc)
+        ctx.drawImage(imgEl, -imgEl.width / 2, -imgEl.height / 2)
+        ctx.restore()
+
+        canvas.toBlob((blob) => {
+            if (blob) aoConfirmar(blob)
+        }, 'image/jpeg', 0.85)
+    }
+
+    const esc = escalaBase() * zoom
+
+    return (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+            <div className="w-full max-w-[360px] bg-white rounded-3xl p-5 shadow-2xl flex flex-col items-center gap-4">
+                <div className="w-full flex items-center justify-between">
+                    <h3 className="font-cinzel font-bold text-gray-800 text-sm">Ajustar Imagem (1:1)</h3>
+                    <button
+                        type="button"
+                        onClick={() => setRotacao(r => (r + 90) % 360)}
+                        className="flex items-center gap-1 text-xs font-bold text-[#C5A059] bg-[#C5A059]/10 px-2.5 py-1.5 rounded-xl cursor-pointer"
+                    >
+                        <RotateCw className="w-3.5 h-3.5" /> Girar
+                    </button>
+                </div>
+
+                <div
+                    className="relative rounded-2xl overflow-hidden bg-gray-100 border-2 border-[#C5A059] select-none touch-none cursor-move"
+                    style={{ width: TAM_VIEW, height: TAM_VIEW }}
+                    onMouseDown={e => iniciarArraste(e.clientX, e.clientY)}
+                    onMouseMove={e => moverArraste(e.clientX, e.clientY)}
+                    onMouseUp={pararArraste}
+                    onMouseLeave={pararArraste}
+                    onTouchStart={e => e.touches[0] && iniciarArraste(e.touches[0].clientX, e.touches[0].clientY)}
+                    onTouchMove={e => e.touches[0] && moverArraste(e.touches[0].clientX, e.touches[0].clientY)}
+                    onTouchEnd={pararArraste}
+                >
+                    {imgEl && (
+                        <img
+                            src={src}
+                            alt="Recorte"
+                            draggable={false}
+                            className="pointer-events-none max-w-none absolute left-1/2 top-1/2"
+                            style={{
+                                width: imgEl.width,
+                                height: imgEl.height,
+                                transform: `translate(-50%, -50%) translate(${offset.x}px, ${offset.y}px) rotate(${rotacao}deg) scale(${esc})`
+                            }}
+                        />
+                    )}
+                    <div className="absolute inset-0 pointer-events-none grid grid-cols-3 grid-rows-3">
+                        {Array.from({ length: 9 }).map((_, i) => (
+                            <div key={i} className="border border-white/25" />
+                        ))}
+                    </div>
+                </div>
+
+                <div className="w-full flex items-center gap-2.5 px-1">
+                    <ZoomIn className="w-4 h-4 text-gray-400 shrink-0" />
+                    <input
+                        type="range"
+                        min="1"
+                        max="3"
+                        step="0.02"
+                        value={zoom}
+                        onChange={e => setZoom(parseFloat(e.target.value))}
+                        className="w-full accent-[#C5A059]"
+                    />
+                </div>
+
+                <div className="w-full flex gap-2">
+                    <button
+                        type="button"
+                        onClick={aoCancelar}
+                        className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-600 text-xs font-bold cursor-pointer"
+                    >
+                        Cancelar
+                    </button>
+                    <button
+                        type="button"
+                        onClick={confirmarRecorte}
+                        className="flex-1 py-2.5 rounded-xl bg-[#C5A059] text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm cursor-pointer"
+                    >
+                        <Check className="w-4 h-4" /> Usar Foto 1:1
+                    </button>
+                </div>
+            </div>
+        </div>
+    )
+}
 
 export default function CatalogoManager() {
     const [servicos, setServicos] = useState([])
@@ -35,6 +193,7 @@ export default function CatalogoManager() {
     const [formCategoriaId, setFormCategoriaId] = useState('')
     const [uploading, setUploading] = useState(false)
     const [formAceitaAdicionais, setFormAceitaAdicionais] = useState(true)
+    const [recorteSrc, setRecorteSrc] = useState(null)
 
     // Estados para Gerenciamento de Categorias
     const [catModalAberto, setCatModalAberto] = useState(false)
@@ -110,7 +269,9 @@ export default function CatalogoManager() {
                 .order('id', { ascending: true })
             
             if (errCat) throw errCat
-            const catsOrdenadas = [...(catData || [])].sort((a, b) => ((a.ordem ?? 999999) - (b.ordem ?? 999999)) || (a.id - b.id))
+            const catsOrdenadas = [...(catData || [])]
+                .filter(c => !c.arquivado)
+                .sort(ordenarItens)
             setCategorias(catsOrdenadas)
 
             const { data: servData, error: errServ } = await supabase
@@ -121,11 +282,18 @@ export default function CatalogoManager() {
                 .order('id', { ascending: true })
 
             if (errServ) throw errServ
-            const servsOrdenados = [...(servData || [])].sort((a, b) => ((a.ordem ?? 999999) - (b.ordem ?? 999999)) || (a.id - b.id))
+            const servsOrdenados = [...(servData || [])]
+                .filter(s => !s.arquivado)
+                .sort(ordenarItens)
             setServicos(servsOrdenados)
 
-            if (catsOrdenadas && catsOrdenadas.length > 0 && !formCategoriaId) {
-                setFormCategoriaId(catsOrdenadas[0].id.toString())
+            if (catsOrdenadas.length > 0) {
+                const catValida = catsOrdenadas.some(c => String(c.id) === String(formCategoriaId))
+                if (!catValida) {
+                    setFormCategoriaId(catsOrdenadas[0].id.toString())
+                }
+            } else {
+                setFormCategoriaId('')
             }
         } catch (error) {
             console.error('Erro ao buscar dados do catálogo:', error)
@@ -164,7 +332,7 @@ export default function CatalogoManager() {
     const handleMoverServico = async (servicoId, categoriaId, direcao) => {
         const servsCat = servicos
             .filter(s => s.categoria_id === categoriaId)
-            .sort((a, b) => ((a.ordem ?? 999999) - (b.ordem ?? 999999)) || (a.id - b.id))
+            .sort(ordenarItens)
 
         const index = servsCat.findIndex(s => s.id === servicoId)
         if (index === -1) return
@@ -198,44 +366,65 @@ export default function CatalogoManager() {
         setTimeout(() => setToastMessage(''), 4000)
     }
 
-    const handleUploadImg = async (e) => {
-        const file = e.target.files[0]
+    const handleSelecionarArquivo = (e) => {
+        const file = e.target.files?.[0]
+        e.target.value = ''
         if (!file) return
+        const reader = new FileReader()
+        reader.onload = () => setRecorteSrc(reader.result)
+        reader.readAsDataURL(file)
+    }
 
+    const handleConfirmarRecorte = async (blob) => {
+        setRecorteSrc(null)
         try {
             setUploading(true)
-            showToast('Fazendo upload da imagem...')
+            showToast('Processando imagem 1:1...')
 
             const tenantId = localStorage.getItem('as_active_tenant') || import.meta.env.VITE_TENANT_ID || 'demo'
-            const fileExt = file.name.split('.').pop()
-            const fileName = `${Date.now()}.${fileExt}`
+            const fileName = `${Date.now()}.jpg`
             const filePath = `${tenantId}/${fileName}`
 
+            let urlFinal = null
+
+            // 1. Tenta enviar ao Supabase Storage caso o bucket esteja liberado
             const { error: uploadError } = await supabase.storage
                 .from('stores-media')
-                .upload(filePath, file)
+                .upload(filePath, blob, { contentType: 'image/jpeg' })
 
-            if (uploadError) throw uploadError
-
-            const { data } = supabase.storage
-                .from('stores-media')
-                .getPublicUrl(filePath)
-
-            if (data && data.publicUrl) {
-                setFormImg(data.publicUrl)
-                showToast('Upload concluído com sucesso!')
-            } else {
-                throw new Error('Falha ao obter URL pública.')
+            if (!uploadError) {
+                const { data } = supabase.storage
+                    .from('stores-media')
+                    .getPublicUrl(filePath)
+                if (data?.publicUrl) {
+                    urlFinal = data.publicUrl
+                }
             }
+
+            // 2. Fallback automático infalível: se o bucket retornar RLS/erro, converte o recorte 1:1 otimizado em DataURL
+            if (!urlFinal) {
+                urlFinal = await blobParaDataUrl(blob)
+            }
+
+            setFormImg(urlFinal)
+            showToast('Imagem 1:1 pronta!')
         } catch (error) {
-            console.error('Erro no upload da imagem:', error)
-            showToast('Erro ao realizar o upload.')
+            console.error('Erro ao processar imagem:', error)
+            showToast('Erro ao processar a imagem.')
         } finally {
             setUploading(false)
         }
     }
 
     const handleOpenCreateModal = () => {
+        if (categorias.length === 0) {
+            showToast('Crie ao menos uma categoria antes de cadastrar um serviço.')
+            setCatEditandoId(null)
+            setCatNome('')
+            setCatEscolha(true)
+            setCatModalAberto(true)
+            return
+        }
         setEditandoId(null)
         setFormNome('')
         setFormDescricao('')
@@ -243,9 +432,7 @@ export default function CatalogoManager() {
         setFormImg('')
         setFormTipo('')
         setFormAceitaAdicionais(true)
-        if (categorias.length > 0) {
-            setFormCategoriaId(categorias[0].id.toString())
-        }
+        setFormCategoriaId(categorias[0].id.toString())
         setModalAberto(true)
     }
 
@@ -256,7 +443,7 @@ export default function CatalogoManager() {
         setFormValor(String(serv.valor).replace('.', ','))
         setFormImg(serv.img || '')
         setFormTipo(serv.tipo || '')
-        setFormCategoriaId(serv.categoria_id.toString())
+        setFormCategoriaId((serv.categoria_id ?? categorias[0]?.id ?? '').toString())
         setFormAceitaAdicionais(serv.aceita_adicionais ?? true)
         setModalAberto(true)
     }
@@ -269,9 +456,16 @@ export default function CatalogoManager() {
             return
         }
 
-        const valorFormatado = parseFloat(formValor.replace(',', '.'))
-        if (isNaN(valorFormatado)) {
+        const valorLimpo = String(formValor).replace(/[^\d.,-]/g, '').replace(',', '.')
+        const valorFormatado = parseFloat(valorLimpo)
+        if (isNaN(valorFormatado) || valorFormatado < 0) {
             showToast('Por favor, informe um valor monetário válido.')
+            return
+        }
+
+        const catIdNum = parseInt(formCategoriaId) || categorias[0]?.id
+        if (!catIdNum) {
+            showToast('Selecione ou crie uma categoria válida.')
             return
         }
 
@@ -283,8 +477,9 @@ export default function CatalogoManager() {
             valor: valorFormatado,
             img: formImg.trim() || null,
             tipo: formTipo === '' ? null : formTipo,
-            categoria_id: parseInt(formCategoriaId),
-            aceita_adicionais: formAceitaAdicionais
+            categoria_id: catIdNum,
+            aceita_adicionais: formAceitaAdicionais,
+            arquivado: false
         }
 
         try {
@@ -297,9 +492,11 @@ export default function CatalogoManager() {
                 if (error) throw error
                 showToast('Serviço atualizado com sucesso!')
             } else {
+                const servsDaCat = servicos.filter(s => s.categoria_id === catIdNum)
+                const novaOrdem = servsDaCat.length
                 const { error } = await supabase
                     .from('servicos')
-                    .insert(dadosServico)
+                    .insert({ ...dadosServico, ordem: novaOrdem })
 
                 if (error) throw error
                 showToast('Novo serviço cadastrado com sucesso!')
@@ -313,23 +510,31 @@ export default function CatalogoManager() {
         }
     }
 
+    // Arquiva o serviço no banco (soft delete), preservando o histórico de agendamentos anteriores
     const handleDeletarServico = async (id) => {
-        if (!confirm('Tem certeza que deseja excluir permanentemente este serviço do catálogo?')) {
+        if (!confirm('Deseja remover este serviço do catálogo? (Os pedidos anteriores que tinham este item continuarão preservados no histórico).')) {
             return
         }
 
         try {
-            const { error } = await supabase
+            const { error: errArq } = await supabase
                 .from('servicos')
-                .delete()
+                .update({ arquivado: true })
                 .eq('id', id)
 
-            if (error) throw error
-            showToast('Serviço removido com sucesso!')
+            if (errArq) {
+                const { error: errDel } = await supabase
+                    .from('servicos')
+                    .delete()
+                    .eq('id', id)
+                if (errDel) throw errArq
+            }
+
+            showToast('Serviço removido do catálogo com sucesso!')
             fetchDados()
         } catch (error) {
-            console.error('Erro ao deletar serviço:', error)
-            showToast('Não foi possível excluir the serviço.')
+            console.error('Erro ao remover serviço:', error)
+            showToast('Não foi possível remover o serviço.')
         }
     }
 
@@ -344,7 +549,8 @@ export default function CatalogoManager() {
         const dadosCat = {
             tenant_id: tenantId,
             nome: catNome.trim(),
-            escolha: catEscolha
+            escolha: catEscolha,
+            arquivado: false
         }
 
         try {
@@ -359,7 +565,7 @@ export default function CatalogoManager() {
             } else {
                 const { error } = await supabase
                     .from('categorias')
-                    .insert(dadosCat)
+                    .insert({ ...dadosCat, ordem: categorias.length })
 
                 if (error) throw error
                 showToast('Nova categoria criada com sucesso!')
@@ -376,22 +582,39 @@ export default function CatalogoManager() {
     }
 
     const handleDeletarCategoria = async (id) => {
-        if (!confirm('Deseja realmente excluir esta categoria? Atenção: Se houver serviços vinculados, eles precisarão ser alterados ou removidos primeiro.')) {
+        const servsAtivos = servicos.filter(s => s.categoria_id === id && !s.arquivado)
+        const msg = servsAtivos.length > 0
+            ? `Esta categoria possui ${servsAtivos.length} serviço(s) ativo(s). Ao excluí-la, a categoria e seus serviços sairão do catálogo (mantendo o histórico de pedidos). Deseja continuar?`
+            : 'Deseja realmente excluir esta categoria?'
+
+        if (!confirm(msg)) {
             return
         }
 
         try {
-            const { error } = await supabase
+            // 1. Arquiva todos os serviços pertencentes a essa categoria para preservar histórico
+            await supabase.from('servicos').update({ arquivado: true }).eq('categoria_id', id)
+
+            // 2. Arquiva a categoria (soft delete) sem esbarrar em foreign keys
+            const { error: errArq } = await supabase
                 .from('categorias')
-                .delete()
+                .update({ arquivado: true })
                 .eq('id', id)
 
-            if (error) throw error
+            if (errArq) {
+                await supabase.from('servicos').update({ categoria_id: null }).eq('categoria_id', id)
+                const { error: errDel } = await supabase
+                    .from('categorias')
+                    .delete()
+                    .eq('id', id)
+                if (errDel) throw errArq
+            }
+
             showToast('Categoria removida com sucesso!')
             fetchDados()
         } catch (error) {
             console.error('Erro ao deletar categoria:', error)
-            showToast('Não foi possível excluir. Remova todos os serviços desta categoria antes!')
+            showToast('Não foi possível excluir a categoria.')
         }
     }
 
@@ -424,6 +647,14 @@ export default function CatalogoManager() {
     return (
         <div className="min-h-screen w-full bg-gray-50 flex flex-col font-sans">
             
+            {recorteSrc && (
+                <ModalRecorte1x1
+                    src={recorteSrc}
+                    aoCancelar={() => setRecorteSrc(null)}
+                    aoConfirmar={handleConfirmarRecorte}
+                />
+            )}
+
             {/* Toast flutuante */}
             {toastMessage && (
                 <div className="fixed top-4 right-4 z-50 bg-[#C5A059] text-white px-5 py-3 rounded-2xl shadow-2xl font-semibold flex items-center gap-2 border border-white/20">
@@ -472,7 +703,7 @@ export default function CatalogoManager() {
                     </button>
                     <button 
                         onClick={handleOpenCreateModal}
-                        className="flex items-center gap-1.5 text-xs font-bold text-white bg-[#C5A059] hover:bg-[#b07978] px-4 py-2.5 rounded-xl shadow-sm transition-all cursor-pointer hover:scale-[1.02] active:scale-95"
+                        className="flex items-center gap-1.5 text-xs font-bold text-white bg-[#C5A059] hover:bg-[#b08d48] px-4 py-2.5 rounded-xl shadow-sm transition-all cursor-pointer hover:scale-[1.02] active:scale-95"
                     >
                         <Plus className="w-4 h-4" />
                         <span>Novo Serviço</span>
@@ -489,17 +720,30 @@ export default function CatalogoManager() {
                         <p className="text-sm text-gray-400 font-semibold font-cinzel">Carregando catálogo...</p>
                     </div>
                 ) : categorias.length === 0 ? (
-                    <div className="bg-white rounded-3xl p-10 flex flex-col items-center justify-center text-center border border-gray-100 shadow-sm gap-2">
+                    <div className="bg-white rounded-3xl p-10 flex flex-col items-center justify-center text-center border border-gray-100 shadow-sm gap-3">
                         <Layers className="w-12 h-12 text-[#C5A059]/30" />
-                        <p className="font-semibold text-gray-500">Nenhuma categoria cadastrada</p>
-                        <p className="text-xs text-gray-400">Por favor, cadastre primeiro as categorias no seu banco de dados Supabase.</p>
+                        <p className="font-semibold text-gray-600">Nenhuma categoria ativa cadastrada</p>
+                        <p className="text-xs text-gray-400 max-w-sm">Crie a primeira categoria (ex.: Buquês, Cestas, Alongamento, Adicionais) para começar a adicionar seus produtos ou serviços.</p>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setCatEditandoId(null)
+                                setCatNome('')
+                                setCatEscolha(true)
+                                setCatModalAberto(true)
+                            }}
+                            className="mt-1 px-4 py-2.5 rounded-xl bg-[#C5A059] text-white text-xs font-bold shadow-xs hover:bg-[#b08d48] transition-all cursor-pointer flex items-center gap-1.5"
+                        >
+                            <Plus className="w-4 h-4" />
+                            <span>Criar Primeira Categoria</span>
+                        </button>
                     </div>
                 ) : (
                     <div className="flex flex-col gap-8">
                         {categorias.map((cat, catIdx) => {
                             const servsDaCat = servicos
                                 .filter(s => s.categoria_id === cat.id)
-                                .sort((a, b) => ((a.ordem ?? 999999) - (b.ordem ?? 999999)) || (a.id - b.id))
+                                .sort(ordenarItens)
 
                             return (
                                 <div key={cat.id} className="w-full flex flex-col gap-3 text-left">
@@ -548,7 +792,7 @@ export default function CatalogoManager() {
                                                     <div className="flex items-center gap-3.5 min-w-0">
                                                         <img 
                                                             src={serv.img || AlbertSalesLogo} 
-                                                            className="w-12 h-12 rounded-xl object-cover bg-gray-50 border border-gray-100 flex-shrink-0" 
+                                                            className="w-12 h-12 aspect-square rounded-xl object-cover bg-gray-50 border border-gray-100 flex-shrink-0" 
                                                         />
                                                         <div className="flex flex-col min-w-0">
                                                             <span className="text-sm font-bold text-gray-800 truncate">{serv.nome}</span>
@@ -648,7 +892,7 @@ export default function CatalogoManager() {
                                     type="text" 
                                     value={formNome}
                                     onChange={(e) => setFormNome(e.target.value)}
-                                    placeholder="Ex: Alongamento em Gel"
+                                    placeholder="Ex: Buquê de Rosas / Alongamento em Gel"
                                     className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:border-[#C5A059]"
                                     required
                                 />
@@ -659,7 +903,7 @@ export default function CatalogoManager() {
                                 <textarea 
                                     value={formDescricao}
                                     onChange={(e) => setFormDescricao(e.target.value)}
-                                    placeholder="Ex: Aplicação de alongamento de alta resistência com acabamento fino."
+                                    placeholder="Ex: Descrição detalhada do produto ou serviço."
                                     className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:border-[#C5A059] min-h-[60px]"
                                 />
                             </div>
@@ -672,6 +916,7 @@ export default function CatalogoManager() {
                                     </label>
                                     <input 
                                         type="text" 
+                                        inputMode="decimal"
                                         value={formValor}
                                         onChange={(e) => setFormValor(e.target.value)}
                                         placeholder="35,00"
@@ -701,14 +946,14 @@ export default function CatalogoManager() {
                             <div className="flex flex-col gap-1">
                                 <label className="text-xs font-bold text-gray-700 flex items-center gap-1">
                                     <Image className="w-3.5 h-3.5 text-gray-400" />
-                                    Imagem do Serviço
+                                    Imagem do Serviço (Formato 1:1)
                                 </label>
                                 <div className="flex flex-col gap-2">
                                     <div className="relative border border-dashed border-gray-300 rounded-xl p-3 flex flex-col items-center justify-center bg-gray-50 hover:bg-gray-100/50 transition-colors cursor-pointer group">
                                         <input 
                                             type="file" 
                                             accept="image/*"
-                                            onChange={handleUploadImg}
+                                            onChange={handleSelecionarArquivo}
                                             disabled={uploading}
                                             className="absolute inset-0 opacity-0 cursor-pointer disabled:cursor-not-allowed"
                                         />
@@ -716,17 +961,17 @@ export default function CatalogoManager() {
                                             {uploading ? (
                                                 <>
                                                     <div className="w-5 h-5 border-2 border-[#C5A059]/20 border-t-[#C5A059] rounded-full animate-spin"></div>
-                                                    <span className="text-[11px] font-semibold text-gray-500">Fazendo upload...</span>
+                                                    <span className="text-[11px] font-semibold text-gray-500">Processando imagem...</span>
                                                 </>
                                             ) : formImg ? (
                                                 <>
-                                                    <img src={formImg} className="w-16 h-16 rounded-lg object-cover border border-gray-200" />
-                                                    <span className="text-[10px] font-semibold text-[#C5A059] group-hover:underline">Trocar imagem</span>
+                                                    <img src={formImg} className="w-16 h-16 aspect-square rounded-lg object-cover border border-gray-200" />
+                                                    <span className="text-[10px] font-semibold text-[#C5A059] group-hover:underline">Trocar e cortar imagem (1:1)</span>
                                                 </>
                                             ) : (
                                                 <>
                                                     <Image className="w-5 h-5 text-gray-400 group-hover:scale-110 transition-transform" />
-                                                    <span className="text-xs font-semibold text-gray-500">Escolher Foto do Dispositivo</span>
+                                                    <span className="text-xs font-semibold text-gray-500">Escolher e Cortar Foto (1:1)</span>
                                                     <span className="text-[9px] text-gray-400">JPG, PNG ou WEBP</span>
                                                 </>
                                             )}
@@ -736,14 +981,21 @@ export default function CatalogoManager() {
                                         <div className="flex items-center gap-2">
                                             <input 
                                                 type="text" 
-                                                value={formImg}
+                                                value={formImg.startsWith('data:') ? 'Imagem 1:1 recortada pronta' : formImg}
                                                 readOnly
                                                 className="flex-1 px-3 py-1.5 text-[10px] text-gray-400 border border-gray-100 rounded-lg bg-gray-50/50 focus:outline-none truncate"
                                             />
                                             <button 
                                                 type="button" 
+                                                onClick={() => setRecorteSrc(formImg)}
+                                                className="text-[10px] text-[#C5A059] hover:underline font-bold cursor-pointer"
+                                            >
+                                                Cortar 1:1
+                                            </button>
+                                            <button 
+                                                type="button" 
                                                 onClick={() => setFormImg('')}
-                                                className="text-[10px] text-red-500 hover:underline font-bold"
+                                                className="text-[10px] text-red-500 hover:underline font-bold cursor-pointer"
                                             >
                                                 Limpar
                                             </button>
@@ -782,7 +1034,8 @@ export default function CatalogoManager() {
                         <div className="pt-3 border-t border-gray-100 flex flex-col gap-2">
                             <button 
                                 type="submit"
-                                className="w-full py-2.5 bg-[#C5A059] hover:bg-[#b07978] text-white font-bold text-sm rounded-xl shadow-md hover:scale-[1.02] active:scale-95 transition-all cursor-pointer flex justify-center items-center gap-2"
+                                disabled={uploading}
+                                className="w-full py-2.5 bg-[#C5A059] hover:bg-[#b08d48] text-white font-bold text-sm rounded-xl shadow-md hover:scale-[1.02] active:scale-95 transition-all cursor-pointer flex justify-center items-center gap-2 disabled:opacity-50"
                             >
                                 <Save className="w-4 h-4" />
                                 <span>Salvar no Catálogo</span>
@@ -848,7 +1101,7 @@ export default function CatalogoManager() {
                                 <div className="flex gap-2 mt-1">
                                     <button 
                                         type="submit"
-                                        className="flex-1 py-2 bg-[#C5A059] hover:bg-[#b07978] text-white font-bold text-xs rounded-xl shadow-sm transition-all cursor-pointer flex justify-center items-center gap-1.5"
+                                        className="flex-1 py-2 bg-[#C5A059] hover:bg-[#b08d48] text-white font-bold text-xs rounded-xl shadow-sm transition-all cursor-pointer flex justify-center items-center gap-1.5"
                                     >
                                         <Save className="w-3.5 h-3.5" />
                                         <span>Salvar Categoria</span>
