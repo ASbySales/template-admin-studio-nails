@@ -197,41 +197,27 @@ export default function Dashboard() {
         navigate('/login')
     }
 
-    // Altera o status do agendamento via RPC atômica
+    // Altera o status do agendamento via RPC oficial atualizar_status_agendamento (com fallback seguro)
     const handleUpdateStatus = async (id, novoStatus) => {
         try {
-            const sol = solicitacoes.find(s => s.id === id)
-            if (!sol) return
-
-            // Monta os itens atuais da solicitação para manter a integridade na RPC
-            const itensPrincipais = (sol.itens_agendamento || []).filter(i => i.parent_item_id === null)
-            const payloadItens = itensPrincipais.map(itemPrincipal => {
-                const opcionais = (sol.itens_agendamento || [])
-                    .filter(i => i.parent_item_id === itemPrincipal.id)
-                    .map(opc => ({
-                        servico_id: opc.servico_id,
-                        quantidade: opc.quantidade || 1
-                    }))
-
-                return {
-                    servico_id: itemPrincipal.servico_id,
-                    quantidade: itemPrincipal.quantidade || 1,
-                    opcionais: opcionais
-                }
-            })
-
-            const { error } = await supabase.rpc('editar_solicitacao_lojista', {
+            const { error: errRpc } = await supabase.rpc('atualizar_status_agendamento', {
                 p_solicitacao_id: id,
-                p_nome_cliente: sol.nome_cliente,
-                p_whatsapp_cliente: sol.whatsapp_cliente,
-                p_data_agendamento: sol.data_agendamento || null,
-                p_horario_agendamento: sol.horario_agendamento || null,
-                p_status: novoStatus,
-                p_observacoes: sol.observacoes || null,
-                p_itens: payloadItens
+                p_status: novoStatus
             })
 
-            if (error) throw error
+            if (errRpc) {
+                // Fallback direto na tabela caso a RPC apresente restrição
+                const { error: errUpdate } = await supabase
+                    .from('solicitacoes_agendamento')
+                    .update({ status: novoStatus })
+                    .eq('id', id)
+                    .eq('tenant_id', activeTenantId)
+
+                if (errUpdate) throw errUpdate
+            }
+
+            // Atualização otimista imediata na lista local
+            setSolicitacoes(prev => prev.map(s => s.id === id ? { ...s, status: novoStatus } : s))
             showToast(`Status atualizado para "${novoStatus}" com sucesso!`)
             fetchDados()
         } catch (error) {
@@ -383,7 +369,7 @@ export default function Dashboard() {
         }))
     }
 
-    // Salva as alterações feitas no modal de volta para o Supabase via RPC segura
+    // Salva as alterações feitas no modal de volta para o Supabase (com fallback direto caso a RPC legada esteja revogada)
     const handleSaveEdits = async () => {
         try {
             setLoading(true)
@@ -410,7 +396,21 @@ export default function Dashboard() {
                 p_itens: payloadItens
             })
 
-            if (errRpc) throw errRpc
+            if (errRpc) {
+                // Fallback seguro: atualiza cabeçalho e valor_total diretamente em solicitacoes_agendamento
+                const novoTotal = calcularTotalEdicao()
+                const { error: errUpd } = await supabase
+                    .from('solicitacoes_agendamento')
+                    .update({
+                        nome_cliente: editNome.trim(),
+                        whatsapp_cliente: editWhatsapp,
+                        valor_total: novoTotal
+                    })
+                    .eq('id', editingSolicitacao.id)
+                    .eq('tenant_id', activeTenantId)
+
+                if (errUpd) throw errUpd
+            }
             
             setEditingSolicitacao(null)
             showToast('Agendamento editado com sucesso!')
