@@ -89,13 +89,8 @@ export default function Dashboard() {
         navigate('/login')
     }
 
-    // Som de notificação em formato Base64 para ser 100% autônomo e não falhar
-    const soundUrl = "https://assets.mixkit.co/active_storage/sfx/2869/2869-84.wav"
-
+    // Som de notificação autônomo via Web Audio API (100% offline/online, nunca bloqueado por links externos)
     useEffect(() => {
-        // Tenta inicializar o objeto Audio
-        audioRef.current = new Audio(soundUrl)
-        
         fetchDados()
 
         // Escuta atualizações e novos agendamentos em Tempo Real no Supabase
@@ -209,8 +204,32 @@ export default function Dashboard() {
     }
 
     const tocarNotificacao = () => {
-        if (audioRef.current) {
-            audioRef.current.play().catch(err => console.log('Bloqueado pelo navegador:', err))
+        try {
+            const AudioCtx = window.AudioContext || window.webkitAudioContext
+            if (!AudioCtx) return
+            const ctx = audioRef.current || new AudioCtx()
+            audioRef.current = ctx
+            if (ctx.state === 'suspended') ctx.resume()
+
+            const tocarNota = (freq, inicio, duracao) => {
+                const osc = ctx.createOscillator()
+                const gain = ctx.createGain()
+                osc.type = 'sine'
+                osc.frequency.setValueAtTime(freq, ctx.currentTime + inicio)
+                gain.gain.setValueAtTime(0.001, ctx.currentTime + inicio)
+                gain.gain.exponentialRampToValueAtTime(0.25, ctx.currentTime + inicio + 0.02)
+                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + inicio + duracao)
+                osc.connect(gain)
+                gain.connect(ctx.destination)
+                osc.start(ctx.currentTime + inicio)
+                osc.stop(ctx.currentTime + inicio + duracao)
+            }
+
+            // Duplo toque suave de sino (Mi6 -> Sol#6)
+            tocarNota(1318.5, 0, 0.18)
+            tocarNota(1661.2, 0.16, 0.32)
+        } catch (err) {
+            console.log('Áudio bloqueado pelo navegador:', err)
         }
     }
 
