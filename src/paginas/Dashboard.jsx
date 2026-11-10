@@ -596,7 +596,7 @@ export default function Dashboard() {
                             >
                                 {/* Header do Card (Código e Data) */}
                                 <div className="flex justify-between items-center">
-                                    <span className="text-[10px] font-bold text-gray-400 font-mono">#0{String(sol.codigo_pedido).padStart(2, '0')}</span>
+                                    <span className="text-[10px] font-bold text-gray-400 font-mono">#0{String(sol.codigo_pedido ?? sol.id).padStart(2, '0')}</span>
                                     <span className="text-[9px] text-gray-400 font-semibold bg-gray-50 border border-gray-100 rounded-full px-2 py-0.5 shadow-3xs">
                                         {new Date(sol.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
                                     </span>
