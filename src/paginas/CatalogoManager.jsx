@@ -607,7 +607,7 @@ export default function CatalogoManager() {
             fetchDados()
         } catch (error) {
             console.error('Erro ao salvar categoria:', error)
-            showToast('Erro ao salvar a categoria no banco de dados.')
+            showToast(`Erro ao salvar categoria: ${error?.message || error?.code || 'erro desconhecido'}`)
         }
     }
 

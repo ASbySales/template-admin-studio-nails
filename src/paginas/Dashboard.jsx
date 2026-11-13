@@ -835,7 +835,7 @@ export default function Dashboard() {
                                                     return (
                                                         <div key={itemPrincipal.id} className="flex flex-col gap-0.5">
                                                             <span className="text-[13px] text-gray-600 font-medium">
-                                                                {nomeItem}
+                                                                {(itemPrincipal.quantidade || 1) > 1 ? `${itemPrincipal.quantidade}x ` : ''}{nomeItem}
                                                             </span>
                                                             {opcionais.length > 0 && (
                                                                 <div className="pl-2.5 flex flex-col gap-0.5 border-l-2 border-dashed border-gray-200">
