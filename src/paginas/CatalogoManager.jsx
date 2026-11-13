@@ -184,6 +184,7 @@ export default function CatalogoManager() {
     const [valorAcrescimo, setValorAcrescimo] = useState('0')
     const [infoAdicional, setInfoAdicional] = useState('')
     const [salvandoConfig, setSalvandoConfig] = useState(false)
+    const isLojaVendas = ['vendas', 'loja', 'produtos'].includes((tenantInfo?.segmento || '').toLowerCase())
     
     // Estados do Formulário de Serviço
     const [modalAberto, setModalAberto] = useState(false)
@@ -736,7 +737,7 @@ export default function CatalogoManager() {
                         className="flex items-center gap-1.5 text-xs font-bold text-white bg-[#C5A059] hover:bg-[#b08d48] px-4 py-2.5 rounded-xl shadow-sm transition-all cursor-pointer hover:scale-[1.02] active:scale-95"
                     >
                         <Plus className="w-4 h-4" />
-                        <span>Novo Serviço</span>
+                        <span>{isLojaVendas ? 'Novo Produto' : 'Novo Serviço'}</span>
                     </button>
                 </div>
             </header>
@@ -744,45 +745,47 @@ export default function CatalogoManager() {
             {/* Container Principal */}
             <main className="flex-1 max-w-[1000px] w-full mx-auto p-4 md:p-6 flex flex-col gap-6">
 
-                {/* Configurações Universais da Loja (Acréscimo / Frete e Retirada) */}
-                <form
-                    onSubmit={handleSalvarConfigLoja}
-                    className="bg-white rounded-2xl p-4 border border-gray-100 shadow-xs flex flex-col md:flex-row gap-3 items-stretch md:items-end"
-                >
-                    <div className="w-full md:w-48">
-                        <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-500 mb-1">
-                            Valor Acrescido (R$)
-                        </label>
-                        <input
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            value={valorAcrescimo}
-                            onChange={(e) => setValorAcrescimo(e.target.value)}
-                            placeholder="0.00"
-                            className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm font-semibold text-gray-800 focus:outline-none focus:border-[#C5A059]"
-                        />
-                    </div>
-                    <div className="flex-1">
-                        <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-500 mb-1">
-                            Info Adicional (Endereço de Retirada / Aviso)
-                        </label>
-                        <input
-                            type="text"
-                            value={infoAdicional}
-                            onChange={(e) => setInfoAdicional(e.target.value)}
-                            placeholder="Ex: Rua das Flores, 88 — Seg a Sáb, 09h às 18h"
-                            className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm text-gray-800 focus:outline-none focus:border-[#C5A059]"
-                        />
-                    </div>
-                    <button
-                        type="submit"
-                        disabled={salvandoConfig}
-                        className="px-5 py-2.5 rounded-xl bg-[#C5A059] hover:bg-[#b08d48] text-white text-xs font-bold shadow-xs transition-all cursor-pointer disabled:opacity-60 shrink-0"
+                {/* Configurações Universais da Loja (exibido apenas para Lojas de Vendas) */}
+                {isLojaVendas && (
+                    <form
+                        onSubmit={handleSalvarConfigLoja}
+                        className="bg-white rounded-2xl p-4 border border-gray-100 shadow-xs flex flex-col md:flex-row gap-3 items-stretch md:items-end"
                     >
-                        {salvandoConfig ? 'Salvando...' : 'Salvar Taxa / Info'}
-                    </button>
-                </form>
+                        <div className="w-full md:w-48">
+                            <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-500 mb-1">
+                                Valor Acrescido (R$)
+                            </label>
+                            <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                value={valorAcrescimo}
+                                onChange={(e) => setValorAcrescimo(e.target.value)}
+                                placeholder="0.00"
+                                className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm font-semibold text-gray-800 focus:outline-none focus:border-[#C5A059]"
+                            />
+                        </div>
+                        <div className="flex-1">
+                            <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-500 mb-1">
+                                Info Adicional (Endereço de Retirada / Aviso)
+                            </label>
+                            <input
+                                type="text"
+                                value={infoAdicional}
+                                onChange={(e) => setInfoAdicional(e.target.value)}
+                                placeholder="Ex: Rua das Flores, 88 — Seg a Sáb, 09h às 18h"
+                                className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm text-gray-800 focus:outline-none focus:border-[#C5A059]"
+                            />
+                        </div>
+                        <button
+                            type="submit"
+                            disabled={salvandoConfig}
+                            className="px-5 py-2.5 rounded-xl bg-[#C5A059] hover:bg-[#b08d48] text-white text-xs font-bold shadow-xs transition-all cursor-pointer disabled:opacity-60 shrink-0"
+                        >
+                            {salvandoConfig ? 'Salvando...' : 'Salvar Taxa / Info'}
+                        </button>
+                    </form>
+                )}
                 
                 {loading ? (
                     <div className="flex-1 flex flex-col items-center justify-center py-20 gap-3">
@@ -950,14 +953,14 @@ export default function CatalogoManager() {
                                 ✕
                             </button>
                             <h2 className="text-md font-cinzel font-bold text-gray-800 tracking-wide">
-                                {editandoId ? 'Editar Serviço' : 'Cadastrar Serviço'}
+                                {editandoId ? (isLojaVendas ? 'Editar Produto' : 'Editar Serviço') : (isLojaVendas ? 'Cadastrar Produto' : 'Cadastrar Serviço')}
                             </h2>
                             <div className="w-8 h-8"></div>
                         </div>
 
                         <div className="flex-1 overflow-y-auto no-scrollbar py-4 flex flex-col gap-4 text-left">
                             <div className="flex flex-col gap-1">
-                                <label className="text-xs font-bold text-gray-700">Nome do Serviço</label>
+                                <label className="text-xs font-bold text-gray-700">{isLojaVendas ? 'Nome do Produto' : 'Nome do Serviço'}</label>
                                 <input 
                                     type="text" 
                                     value={formNome}
@@ -1074,31 +1077,35 @@ export default function CatalogoManager() {
                                 </div>
                             </div>
 
-                            <div className="flex flex-col gap-1">
-                                <label className="text-xs font-bold text-gray-700">Tipo de Item / Cobrança</label>
-                                <select 
-                                    value={formTipo}
-                                    onChange={(e) => setFormTipo(e.target.value)}
-                                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:border-[#C5A059] bg-white"
-                                >
-                                    <option value="">Item Principal (Padrão)</option>
-                                    <option value="extra">Adicional / Extra (Acrescenta ao pedido)</option>
-                                    <option value="substitutivo">Substituição / Variação (Substitui item base)</option>
-                                </select>
-                            </div>
+                            {!isLojaVendas && (
+                                <>
+                                    <div className="flex flex-col gap-1">
+                                        <label className="text-xs font-bold text-gray-700">Tipo de Item / Cobrança</label>
+                                        <select 
+                                            value={formTipo}
+                                            onChange={(e) => setFormTipo(e.target.value)}
+                                            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:border-[#C5A059] bg-white"
+                                        >
+                                            <option value="">Item Principal (Padrão)</option>
+                                            <option value="extra">Adicional / Extra (Acrescenta ao pedido)</option>
+                                            <option value="substitutivo">Substituição / Variação (Substitui item base)</option>
+                                        </select>
+                                    </div>
 
-                            <div className="flex items-center gap-2 py-1">
-                                <input 
-                                    type="checkbox" 
-                                    id="aceita_adicionais"
-                                    checked={formAceitaAdicionais}
-                                    onChange={(e) => setFormAceitaAdicionais(e.target.checked)}
-                                    className="w-4.5 h-4.5 rounded text-[#C5A059] focus:ring-[#C5A059] border-gray-300 accent-[#C5A059] cursor-pointer"
-                                />
-                                <label htmlFor="aceita_adicionais" className="text-xs font-bold text-gray-700 cursor-pointer select-none">
-                                    Permitir adicionar complementos / adicionais neste item
-                                </label>
-                            </div>
+                                    <div className="flex items-center gap-2 py-1">
+                                        <input 
+                                            type="checkbox" 
+                                            id="aceita_adicionais"
+                                            checked={formAceitaAdicionais}
+                                            onChange={(e) => setFormAceitaAdicionais(e.target.checked)}
+                                            className="w-4.5 h-4.5 rounded text-[#C5A059] focus:ring-[#C5A059] border-gray-300 accent-[#C5A059] cursor-pointer"
+                                        />
+                                        <label htmlFor="aceita_adicionais" className="text-xs font-bold text-gray-700 cursor-pointer select-none">
+                                            Permitir adicionar complementos / adicionais neste item
+                                        </label>
+                                    </div>
+                                </>
+                            )}
                         </div>
 
                         <div className="pt-3 border-t border-gray-100 flex flex-col gap-2">
