@@ -184,7 +184,6 @@ export default function CatalogoManager() {
     const [valorAcrescimo, setValorAcrescimo] = useState('0')
     const [infoAdicional, setInfoAdicional] = useState('')
     const [salvandoConfig, setSalvandoConfig] = useState(false)
-    const isLojaVendas = ['vendas', 'loja', 'produtos'].includes((tenantInfo?.segmento || '').toLowerCase())
     
     // Estados do Formulário de Serviço
     const [modalAberto, setModalAberto] = useState(false)
@@ -206,6 +205,7 @@ export default function CatalogoManager() {
     const [catEscolha, setCatEscolha] = useState(true)
 
     const [tenantInfo, setTenantInfo] = useState(null)
+    const isLojaVendas = ['vendas', 'loja', 'produtos'].includes((tenantInfo?.segmento || '').toLowerCase())
     const [assinatura, setAssinatura] = useState(null)
     const navigate = useNavigate()
 
