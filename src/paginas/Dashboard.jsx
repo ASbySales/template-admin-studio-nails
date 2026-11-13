@@ -856,11 +856,28 @@ export default function Dashboard() {
                                             )}
                                         </div>
 
+                                        {/* Observações / Detalhes de Entrega ou Personalização */}
+                                        {sol.observacoes && (
+                                            <div className="bg-amber-50/70 border border-amber-200/80 rounded-xl px-3 py-2 text-left text-[11px] text-amber-950 leading-relaxed">
+                                                <span className="font-bold uppercase tracking-wider text-[10px] text-amber-800 block mb-0.5">
+                                                    Observações / Entrega:
+                                                </span>
+                                                <span>{sol.observacoes}</span>
+                                            </div>
+                                        )}
+
                                         {/* Valor Total e Selo de Status (igual à foto do App JK) */}
-                                        <div className="flex items-center justify-between pt-0.5">
-                                            <span className="font-bold text-[#945B59] text-[17px]">
-                                                R$ {exibirValorTotal(sol).toFixed(2).replace('.', ',')}
-                                            </span>
+                                        <div className="flex items-center justify-between pt-0.5 gap-2 flex-wrap">
+                                            <div className="flex items-baseline gap-2 flex-wrap">
+                                                <span className="font-bold text-[#945B59] text-[17px]">
+                                                    R$ {exibirValorTotal(sol).toFixed(2).replace('.', ',')}
+                                                </span>
+                                                {Number(sol.valor_acrescimo) > 0 && (
+                                                    <span className="text-[10px] font-bold bg-amber-100 text-amber-900 px-2 py-0.5 rounded-full">
+                                                        + R$ {Number(sol.valor_acrescimo).toFixed(2).replace('.', ',')} acréscimo
+                                                    </span>
+                                                )}
+                                            </div>
                                             <span className={`text-[10px] font-bold rounded-full px-3 py-1 uppercase tracking-wider border ${
                                                 statusAtual === 'aprovado' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
                                                 statusAtual === 'negado' ? 'bg-red-50 text-red-600 border-red-200' :

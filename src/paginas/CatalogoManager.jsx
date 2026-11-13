@@ -181,6 +181,9 @@ export default function CatalogoManager() {
     const [categorias, setCategorias] = useState([])
     const [loading, setLoading] = useState(true)
     const [toastMessage, setToastMessage] = useState('')
+    const [valorAcrescimo, setValorAcrescimo] = useState('0')
+    const [infoAdicional, setInfoAdicional] = useState('')
+    const [salvandoConfig, setSalvandoConfig] = useState(false)
     
     // Estados do Formulário de Serviço
     const [modalAberto, setModalAberto] = useState(false)
@@ -250,6 +253,8 @@ export default function CatalogoManager() {
 
             if (tData) {
                 setTenantInfo(tData)
+                setValorAcrescimo(String(tData.valor_acrescimo ?? 0))
+                setInfoAdicional(tData.info_adicional || '')
                 document.title = `${tData.nome} • Gerenciar Catálogo`
             }
 
@@ -538,6 +543,31 @@ export default function CatalogoManager() {
         }
     }
 
+    const handleSalvarConfigLoja = async (e) => {
+        e.preventDefault()
+        const tenantId = localStorage.getItem('as_active_tenant') || import.meta.env.VITE_TENANT_ID || 'demo'
+        const valorNum = Math.max(0, parseFloat(String(valorAcrescimo).replace(',', '.')) || 0)
+
+        try {
+            setSalvandoConfig(true)
+            const { error } = await supabase
+                .from('tenants')
+                .update({
+                    valor_acrescimo: valorNum,
+                    info_adicional: infoAdicional.trim() || null
+                })
+                .eq('id', tenantId)
+
+            if (error) throw error
+            showToast('Configurações de acréscimo e retirada salvas!')
+        } catch (error) {
+            console.error('Erro ao salvar configurações da loja:', error)
+            showToast('Erro ao salvar configurações (verifique permissão admin).')
+        } finally {
+            setSalvandoConfig(false)
+        }
+    }
+
     const handleSalvarCategoria = async (e) => {
         e.preventDefault()
         if (!catNome.trim()) {
@@ -713,6 +743,46 @@ export default function CatalogoManager() {
 
             {/* Container Principal */}
             <main className="flex-1 max-w-[1000px] w-full mx-auto p-4 md:p-6 flex flex-col gap-6">
+
+                {/* Configurações Universais da Loja (Acréscimo / Frete e Retirada) */}
+                <form
+                    onSubmit={handleSalvarConfigLoja}
+                    className="bg-white rounded-2xl p-4 border border-gray-100 shadow-xs flex flex-col md:flex-row gap-3 items-stretch md:items-end"
+                >
+                    <div className="w-full md:w-48">
+                        <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-500 mb-1">
+                            Valor Acrescido (R$)
+                        </label>
+                        <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={valorAcrescimo}
+                            onChange={(e) => setValorAcrescimo(e.target.value)}
+                            placeholder="0.00"
+                            className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm font-semibold text-gray-800 focus:outline-none focus:border-[#C5A059]"
+                        />
+                    </div>
+                    <div className="flex-1">
+                        <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-500 mb-1">
+                            Info Adicional (Endereço de Retirada / Aviso)
+                        </label>
+                        <input
+                            type="text"
+                            value={infoAdicional}
+                            onChange={(e) => setInfoAdicional(e.target.value)}
+                            placeholder="Ex: Rua das Flores, 88 — Seg a Sáb, 09h às 18h"
+                            className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm text-gray-800 focus:outline-none focus:border-[#C5A059]"
+                        />
+                    </div>
+                    <button
+                        type="submit"
+                        disabled={salvandoConfig}
+                        className="px-5 py-2.5 rounded-xl bg-[#C5A059] hover:bg-[#b08d48] text-white text-xs font-bold shadow-xs transition-all cursor-pointer disabled:opacity-60 shrink-0"
+                    >
+                        {salvandoConfig ? 'Salvando...' : 'Salvar Taxa / Info'}
+                    </button>
+                </form>
                 
                 {loading ? (
                     <div className="flex-1 flex flex-col items-center justify-center py-20 gap-3">
