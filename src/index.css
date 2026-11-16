@@ -1,20 +1,94 @@
 @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700;800&family=Inter:wght@300;400;500;600;700&display=swap');
 @import "tailwindcss";
 
+:root,
+[data-tema="gold"] {
+  --as-accent: #C5A059;
+  --as-accent-deep: #9B7A37;
+  --as-soft: #E6D8B8;
+  --as-blush: #FBF6EA;
+  --as-bg: #FAF8F4;
+  --as-card-border: #EDE6D6;
+  --as-shadow: rgba(155, 122, 55, 0.14);
+  --sat: env(safe-area-inset-top, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+}
+
+[data-tema="rose"] {
+  --as-accent: #B38280;
+  --as-accent-deep: #945B59;
+  --as-soft: #E8D5D3;
+  --as-blush: #F8EDEB;
+  --as-bg: #FAF6F4;
+  --as-card-border: #EFE3E1;
+  --as-shadow: rgba(164, 110, 109, 0.16);
+}
+
 body {
-  font-family: 'Inter', sans-serif;
-  background-color: #f9fafb;
+  font-family: 'Inter', system-ui, sans-serif;
+  background-color: var(--as-bg);
+  color: #1F2937;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .font-cinzel {
   font-family: 'Cinzel', serif;
 }
 
-/* Ocultar barra de rolagem */
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }
+
 .no-scrollbar {
-  -ms-overflow-style: none;  /* IE and Edge */
-  scrollbar-width: none;  /* Firefox */
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.pt-safe {
+  padding-top: calc(var(--sat) + 0.5rem);
+}
+
+.pb-safe {
+  padding-bottom: calc(var(--sab) + 0.5rem);
+}
+
+@keyframes as-sheet-in {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+@keyframes as-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes as-pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(-10px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.anim-sheet {
+  animation: as-sheet-in 0.25s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+
+.anim-fade {
+  animation: as-fade-in 0.18s ease;
+}
+
+.anim-pop {
+  animation: as-pop-in 0.22s ease;
 }

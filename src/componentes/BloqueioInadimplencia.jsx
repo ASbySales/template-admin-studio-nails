@@ -1,8 +1,9 @@
 import { useState } from 'react'
-import { LogOut, Copy, Check, Send, RefreshCw, ShieldAlert, Sparkles } from 'lucide-react'
+import { LogOut, Copy, Check, Send, RefreshCw, ShieldAlert } from 'lucide-react'
 import AlbertSalesLogo from '../assets/AlbertSalesLogo.png'
+import { getSegmentoMeta } from '../lib/segmento'
 
-const WHATSAPP_AS = '5583996327988'
+const WHATSAPP_AS = '5583988964507'
 const CHAVE_PIX_PADRAO = '4lbert.ns@gmail.com'
 
 export default function BloqueioInadimplencia({ tenantInfo, assinatura, onAtualizarStatus, onDeslogar }) {
@@ -64,7 +65,7 @@ export default function BloqueioInadimplencia({ tenantInfo, assinatura, onAtuali
 
                 {/* Banner de Tranquilidade para a Loja */}
                 <div className="w-full bg-emerald-50/70 border border-emerald-200/80 rounded-2xl p-3.5 mt-4 text-left flex items-start gap-3">
-                    <span className="text-emerald-700 text-base">🌸</span>
+                    <span className="text-emerald-700 text-base">{getSegmentoMeta(tenantInfo?.segmento).emoji}</span>
                     <div className="text-[11px] text-emerald-900 leading-relaxed">
                         <strong className="block text-emerald-950 font-bold">Sua Vitrine Pública continua no ar!</strong>
                         Seus clientes continuam acessando o catálogo na bio do Instagram e enviando pedidos no WhatsApp normalmente. Apenas este painel administrativo requer a regularização.

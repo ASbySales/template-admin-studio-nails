@@ -1,18 +1,26 @@
 import { useState, useEffect } from 'react'
-import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom'
+import { Routes, Route, Navigate, useNavigate } from 'react-router-dom'
 import { supabase } from './lib/supabase'
 import Login from './paginas/Login'
 import RedefinirSenha from './paginas/RedefinirSenha'
 import Dashboard from './paginas/Dashboard'
 import CatalogoManager from './paginas/CatalogoManager'
 import MinhaAssinatura from './paginas/MinhaAssinatura'
+import { AdminUIProvider } from './componentes/AdminUIProvider'
 import './App.css'
+
+function RotaProtegida({ autenticado, children }) {
+  const isAuth = autenticado || localStorage.getItem('admin_demo_auth') === 'true'
+  if (!isAuth) {
+    return <Navigate to="/login" replace />
+  }
+  return children
+}
 
 function App() {
   const [autenticado, setAutenticado] = useState(() => {
     return localStorage.getItem('admin_demo_auth') === 'true'
   })
-  const location = useLocation()
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -72,61 +80,47 @@ function App() {
     return () => subscription.unsubscribe()
   }, [navigate])
 
-  // Sincroniza estado com location
-  useEffect(() => {
-    setAutenticado(localStorage.getItem('admin_demo_auth') === 'true')
-  }, [location])
-
-  // Componente de Rota Protegida
-  const RotaProtegida = ({ children }) => {
-    const isAuth = autenticado || localStorage.getItem('admin_demo_auth') === 'true'
-    
-    if (!isAuth) {
-      return <Navigate to="/login" replace />
-    }
-
-    return children
-  }
-
   return (
-    <Routes>
-      <Route path="/login" element={<Login />} />
-      <Route path="/redefinir-senha" element={<RedefinirSenha />} />
-      <Route 
-        path="/" 
-        element={
-          <RotaProtegida>
-            <Dashboard />
-          </RotaProtegida>
-        } 
-      />
-      <Route 
-        path="/servicos" 
-        element={
-          <RotaProtegida>
-            <CatalogoManager />
-          </RotaProtegida>
-        } 
-      />
-      <Route 
-        path="/pagamentos" 
-        element={
-          <RotaProtegida>
-            <MinhaAssinatura />
-          </RotaProtegida>
-        } 
-      />
-      <Route 
-        path="/assinatura" 
-        element={
-          <RotaProtegida>
-            <MinhaAssinatura />
-          </RotaProtegida>
-        } 
-      />
-      {/* Fallback de redirecionamento */}
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+    <AdminUIProvider>
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route path="/redefinir-senha" element={<RedefinirSenha />} />
+        <Route
+          path="/"
+          element={
+            <RotaProtegida autenticado={autenticado}>
+              <Dashboard />
+            </RotaProtegida>
+          }
+        />
+        <Route
+          path="/servicos"
+          element={
+            <RotaProtegida autenticado={autenticado}>
+              <CatalogoManager />
+            </RotaProtegida>
+          }
+        />
+        <Route
+          path="/pagamentos"
+          element={
+            <RotaProtegida autenticado={autenticado}>
+              <MinhaAssinatura />
+            </RotaProtegida>
+          }
+        />
+        <Route
+          path="/assinatura"
+          element={
+            <RotaProtegida autenticado={autenticado}>
+              <MinhaAssinatura />
+            </RotaProtegida>
+          }
+        />
+        {/* Fallback de redirecionamento */}
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </AdminUIProvider>
   )
 }
 

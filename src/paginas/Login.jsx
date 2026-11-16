@@ -46,6 +46,10 @@ export default function Login() {
                     .from('tenants_usuarios')
                     .select('tenant_id, role, tenants(id, nome, segmento)')
 
+                if (vinculosErr) {
+                    console.warn('Erro ao buscar vínculos de tenant:', vinculosErr)
+                }
+
                 let tenantId = 'demo'
                 let tenantNome = 'Estabelecimento'
 
