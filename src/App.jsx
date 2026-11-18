@@ -9,23 +9,29 @@ import MinhaAssinatura from './paginas/MinhaAssinatura'
 import { AdminUIProvider } from './componentes/AdminUIProvider'
 import './App.css'
 
-function RotaProtegida({ autenticado, children }) {
-  const isAuth = autenticado || localStorage.getItem('admin_demo_auth') === 'true'
-  if (!isAuth) {
+function RotaProtegida({ autenticado, verificandoSessao, children }) {
+  if (verificandoSessao) {
+    return (
+      <div className="min-h-screen w-full flex items-center justify-center bg-gray-50 text-gray-500 text-xs font-medium">
+        Verificando sessão...
+      </div>
+    )
+  }
+  if (!autenticado) {
     return <Navigate to="/login" replace />
   }
   return children
 }
 
 function App() {
-  const [autenticado, setAutenticado] = useState(() => {
-    return localStorage.getItem('admin_demo_auth') === 'true'
-  })
+  const [autenticado, setAutenticado] = useState(false)
+  const [verificandoSessao, setVerificandoSessao] = useState(true)
   const navigate = useNavigate()
 
   useEffect(() => {
     // Se a URL contiver token de recuperação do Supabase, força navegação para /redefinir-senha
     if (window.location.hash.includes('type=recovery') || window.location.href.includes('type=recovery')) {
+      setVerificandoSessao(false)
       navigate('/redefinir-senha')
       return
     }
@@ -49,31 +55,40 @@ function App() {
     }
 
     // 1. Verifica sessão nativa existente
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        setAutenticado(true)
-        localStorage.setItem('admin_demo_auth', 'true')
-        sincronizarTenant()
-      }
-    })
+    supabase.auth
+      .getSession()
+      .then(({ data: { session } }) => {
+        if (session?.user) {
+          setAutenticado(true)
+          sincronizarTenant()
+        } else {
+          setAutenticado(false)
+        }
+      })
+      .finally(() => {
+        setVerificandoSessao(false)
+      })
 
     // 2. Escuta eventos de login/logout em tempo real
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'PASSWORD_RECOVERY') {
+        setVerificandoSessao(false)
         navigate('/redefinir-senha')
         return
       }
 
       if (session?.user) {
         setAutenticado(true)
-        localStorage.setItem('admin_demo_auth', 'true')
+        setVerificandoSessao(false)
         sincronizarTenant()
-      } else if (event === 'SIGNED_OUT') {
+      } else {
         setAutenticado(false)
-        localStorage.removeItem('as_active_tenant')
-        localStorage.removeItem('as_user_tenants')
-        localStorage.removeItem('as_auth_user')
-        localStorage.removeItem('admin_demo_auth')
+        setVerificandoSessao(false)
+        if (event === 'SIGNED_OUT') {
+          localStorage.removeItem('as_active_tenant')
+          localStorage.removeItem('as_user_tenants')
+          localStorage.removeItem('as_auth_user')
+        }
       }
     })
 
@@ -88,7 +103,7 @@ function App() {
         <Route
           path="/"
           element={
-            <RotaProtegida autenticado={autenticado}>
+            <RotaProtegida autenticado={autenticado} verificandoSessao={verificandoSessao}>
               <Dashboard />
             </RotaProtegida>
           }
@@ -96,7 +111,7 @@ function App() {
         <Route
           path="/servicos"
           element={
-            <RotaProtegida autenticado={autenticado}>
+            <RotaProtegida autenticado={autenticado} verificandoSessao={verificandoSessao}>
               <CatalogoManager />
             </RotaProtegida>
           }
@@ -104,7 +119,7 @@ function App() {
         <Route
           path="/pagamentos"
           element={
-            <RotaProtegida autenticado={autenticado}>
+            <RotaProtegida autenticado={autenticado} verificandoSessao={verificandoSessao}>
               <MinhaAssinatura />
             </RotaProtegida>
           }
@@ -112,7 +127,7 @@ function App() {
         <Route
           path="/assinatura"
           element={
-            <RotaProtegida autenticado={autenticado}>
+            <RotaProtegida autenticado={autenticado} verificandoSessao={verificandoSessao}>
               <MinhaAssinatura />
             </RotaProtegida>
           }

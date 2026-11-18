@@ -74,7 +74,6 @@ export default function Login() {
                     tenant_id: tenantId,
                     tenant_nome: tenantNome
                 }))
-                localStorage.setItem('admin_demo_auth', 'true')
 
                 navigate('/')
                 return

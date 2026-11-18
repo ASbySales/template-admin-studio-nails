@@ -55,7 +55,6 @@ export default function RedefinirSenha() {
             await supabase.auth.signOut()
             localStorage.removeItem('as_active_tenant')
             localStorage.removeItem('as_auth_user')
-            localStorage.removeItem('admin_demo_auth')
             setTimeout(() => {
                 navigate('/login')
             }, 3000)
