@@ -1,5 +1,14 @@
 const SEGMENTOS_LOJA_VENDAS = ['vendas', 'loja', 'produtos']
-const SEGMENTOS_NAIL_DESIGN = ['nails', 'nail_design', 'nail-design', 'naildesign', 'manicure']
+const SEGMENTOS_NAIL_DESIGN = [
+  'nails',
+  'nail_design',
+  'nail-design',
+  'naildesign',
+  'manicure',
+  'estudio',
+  'estúdio',
+  'studio',
+]
 
 export function normalizarSegmento(segmento) {
   return String(segmento || '').trim().toLowerCase()

@@ -27,16 +27,26 @@ import {
   formatarBrl,
   formatarCodigoPedido,
   getSegmentoMeta,
+  isNailDesign,
   mascaraWhatsapp,
   telLink,
   tempoRelativo,
   verificarBloqueioAssinatura,
   whatsappLink,
 } from '../lib/segmento'
+import {
+  PADRAO_CONFIG_AGENDA,
+  formatarDataIsoBr,
+  normalizarConfigAgenda,
+  obterConfigDoDia,
+  obterHorariosDoDia,
+  periodosConflitam,
+} from '../lib/horarios'
 import { deslogarAdmin, lerVinculosEmCache, resolverTenantAtivo } from '../lib/tenantSession'
 import { useAdminUI } from '../lib/adminUi'
 import { AdminShell, PuxarAtualizar, SeloStatus, Sheet } from '../componentes/AppLayout'
 import BloqueioInadimplencia from '../componentes/BloqueioInadimplencia'
+import HorariosSheet from '../componentes/HorariosSheet'
 
 const ABAS_STATUS = [
   { id: 'pendente', rotulo: 'Pendentes' },
@@ -50,28 +60,6 @@ const ROTULOS_STATUS = {
   aprovado: 'Aprovado',
   cumprido: 'Cumprido',
   negado: 'Negado',
-}
-
-const HORARIOS_SEMANA = ['07:00 - 09:30', '09:30 - 12:00', '13:00 - 15:30', '15:30 - 18:00']
-const HORARIOS_SABADO = ['07:00 - 09:30', '09:30 - 12:00']
-
-function obterDiaSemanaIso(isoDate) {
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(isoDate || '').trim())
-  if (!m) return -1
-  return new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 12, 0, 0)).getUTCDay()
-}
-
-function obterHorariosAdminPorData(isoDate) {
-  const d = obterDiaSemanaIso(isoDate)
-  if (d === 0) return []
-  if (d === 6) return HORARIOS_SABADO
-  return HORARIOS_SEMANA
-}
-
-function formatarDataIsoBr(d) {
-  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(d || '').trim())
-  if (!m) return d || ''
-  return `${m[3]}/${m[2]}/${m[1]}`
 }
 
 function CardSolicitacao({
@@ -88,6 +76,7 @@ function CardSolicitacao({
   onAtualizarStatus,
 }) {
   const statusAtual = sol.status || 'pendente'
+  const isEstudio = isNailDesign(segmento)
   const isNovo =
     statusAtual === 'pendente' && agoraMs - new Date(sol.created_at).getTime() < 12 * 3600 * 1000
   const itensPrincipais = (sol.itens_agendamento || []).filter((i) => i.parent_item_id === null)
@@ -222,7 +211,7 @@ function CardSolicitacao({
           )}
         </div>
 
-        {(sol.data_agendamento || sol.horario_agendamento) && (
+        {isEstudio && (sol.data_agendamento || sol.horario_agendamento) && (
           <button
             type="button"
             onClick={(e) => {
@@ -292,20 +281,22 @@ function CardSolicitacao({
 
         {statusAtual === 'aprovado' && (
           <div className="flex flex-col gap-2 pt-1" onClick={(e) => e.stopPropagation()}>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => onAbrirEdicao(sol)}
-                className="py-2.5 px-3 rounded-2xl bg-white border border-[var(--as-soft)] hover:bg-gray-50 flex items-center justify-center gap-1.5 text-xs font-bold transition-all active:scale-95 cursor-pointer"
-                style={{ color: 'var(--as-accent-deep)' }}
-              >
-                <Clock className="w-4 h-4" />
-                <span>Reagendar</span>
-              </button>
+            <div className={isEstudio ? 'grid grid-cols-2 gap-2' : 'flex'}>
+              {isEstudio && (
+                <button
+                  type="button"
+                  onClick={() => onAbrirEdicao(sol)}
+                  className="py-2.5 px-3 rounded-2xl bg-white border border-[var(--as-soft)] hover:bg-gray-50 flex items-center justify-center gap-1.5 text-xs font-bold transition-all active:scale-95 cursor-pointer"
+                  style={{ color: 'var(--as-accent-deep)' }}
+                >
+                  <Clock className="w-4 h-4" />
+                  <span>Reagendar</span>
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => onAtualizarStatus(sol, 'cumprido')}
-                className="py-2.5 px-3 rounded-2xl bg-[#E7F6ED] hover:bg-[#d5f0e0] text-[#1E7A46] flex items-center justify-center gap-1.5 text-xs font-bold transition-all active:scale-95 cursor-pointer"
+                className={`${isEstudio ? '' : 'w-full '}py-2.5 px-3 rounded-2xl bg-[#E7F6ED] hover:bg-[#d5f0e0] text-[#1E7A46] flex items-center justify-center gap-1.5 text-xs font-bold transition-all active:scale-95 cursor-pointer`}
               >
                 <CheckSquare className="w-4 h-4" />
                 <span>Cumprir</span>
@@ -515,25 +506,27 @@ function DetalheSolicitacaoSheet({ sol, servicos, segmento, aoFechar, aoAbrirEdi
       </div>
       <p className="text-center text-xs text-gray-500 mt-2 font-medium">{sol.whatsapp_cliente}</p>
 
-      <button
-        type="button"
-        onClick={() => aoAbrirEdicao(sol)}
-        className="mt-4 w-full bg-white rounded-2xl border border-[var(--as-card-border)] p-3.5 flex items-center justify-between gap-2.5 text-xs text-gray-700 hover:bg-gray-50/70 transition active:scale-[0.99] cursor-pointer text-left"
-      >
-        <div className="flex items-center gap-2.5 min-w-0">
-          <Calendar className="w-4 h-4 shrink-0" style={{ color: 'var(--as-accent)' }} />
-          <div className="flex flex-col min-w-0">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
-              {statusAtual === 'aprovado' ? 'Agendamento confirmado (toque para reagendar)' : 'Data e horário solicitados'}
-            </span>
-            <span className="truncate">
-              {sol.data_agendamento ? <strong>{formatarDataIsoBr(sol.data_agendamento)}</strong> : <em>Definir data</em>}
-              {sol.horario_agendamento ? ` · ${sol.horario_agendamento}` : ' · Definir horário'}
-            </span>
+      {meta.isNail && (
+        <button
+          type="button"
+          onClick={() => aoAbrirEdicao(sol)}
+          className="mt-4 w-full bg-white rounded-2xl border border-[var(--as-card-border)] p-3.5 flex items-center justify-between gap-2.5 text-xs text-gray-700 hover:bg-gray-50/70 transition active:scale-[0.99] cursor-pointer text-left"
+        >
+          <div className="flex items-center gap-2.5 min-w-0">
+            <Calendar className="w-4 h-4 shrink-0" style={{ color: 'var(--as-accent)' }} />
+            <div className="flex flex-col min-w-0">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                {statusAtual === 'aprovado' ? 'Agendamento confirmado (toque para reagendar)' : 'Data e horário solicitados'}
+              </span>
+              <span className="truncate">
+                {sol.data_agendamento ? <strong>{formatarDataIsoBr(sol.data_agendamento)}</strong> : <em>Definir data</em>}
+                {sol.horario_agendamento ? ` · ${sol.horario_agendamento}` : ' · Definir horário'}
+              </span>
+            </div>
           </div>
-        </div>
-        <Pencil className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-      </button>
+          <Pencil className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+        </button>
+      )}
 
       {sol.observacoes && (
         <div className="mt-4 bg-amber-50/80 border border-amber-200 rounded-2xl p-3.5 text-xs text-amber-950 leading-relaxed">
@@ -619,6 +612,8 @@ function EditarSolicitacaoSheet({
   todasSolicitacoes = [],
   servicos,
   opcionaisDisponiveis,
+  isEstudio = false,
+  configAgenda = PADRAO_CONFIG_AGENDA,
   aoFechar,
   aoSalvo,
 }) {
@@ -702,8 +697,14 @@ function EditarSolicitacaoSheet({
           })),
       }))
 
-      const dataLimpa = dataAgendamento ? String(dataAgendamento).slice(0, 10) : null
-      const horarioLimpo = String(horarioAgendamento || '').trim() || null
+      const dataLimpa = isEstudio
+        ? dataAgendamento
+          ? String(dataAgendamento).slice(0, 10)
+          : null
+        : sol.data_agendamento ?? null
+      const horarioLimpo = isEstudio
+        ? String(horarioAgendamento || '').trim() || null
+        : sol.horario_agendamento ?? null
 
       const { error: errRpc } = await supabase.rpc('editar_solicitacao_lojista', {
         p_solicitacao_id: sol.id,
@@ -718,20 +719,23 @@ function EditarSolicitacaoSheet({
 
       const tenantId = sol.tenant_id || localStorage.getItem('as_active_tenant')
       if (errRpc) {
+        const camposUpd = {
+          nome_cliente: nome.trim(),
+          whatsapp_cliente: whatsapp,
+          valor_total: totalCalculado > 0 ? totalCalculado : sol.valor_total,
+        }
+        if (isEstudio) {
+          camposUpd.data_agendamento = dataLimpa
+          camposUpd.horario_agendamento = horarioLimpo
+        }
         const { error: errUpd } = await supabase
           .from('solicitacoes_agendamento')
-          .update({
-            nome_cliente: nome.trim(),
-            whatsapp_cliente: whatsapp,
-            data_agendamento: dataLimpa,
-            horario_agendamento: horarioLimpo,
-            valor_total: totalCalculado > 0 ? totalCalculado : sol.valor_total,
-          })
+          .update(camposUpd)
           .eq('id', sol.id)
           .eq('tenant_id', tenantId)
 
         if (errUpd) throw errUpd
-      } else {
+      } else if (isEstudio) {
         await supabase
           .from('solicitacoes_agendamento')
           .update({
@@ -800,9 +804,20 @@ function EditarSolicitacaoSheet({
           />
         </div>
 
-        {(() => {
-          const diaSemana = dataAgendamento ? obterDiaSemanaIso(dataAgendamento) : -1
-          const horariosSugeridos = dataAgendamento ? obterHorariosAdminPorData(dataAgendamento) : HORARIOS_SEMANA
+        {isEstudio && (() => {
+          const cfgDia = dataAgendamento
+            ? obterConfigDoDia(dataAgendamento, configAgenda)
+            : { ativo: false, periodos: [], origem: 'vazio', motivo: '' }
+          const slotsGrade = dataAgendamento
+            ? obterHorariosDoDia(dataAgendamento, configAgenda).map((h) => h.id)
+            : []
+          const horarioOriginal = String(sol.horario_agendamento || '').trim()
+          const opcoesHorarios = [
+            ...slotsGrade.map((id) => ({ id, legado: false })),
+            ...(horarioOriginal && !slotsGrade.includes(horarioOriginal)
+              ? [{ id: horarioOriginal, legado: true }]
+              : []),
+          ]
           const ocupadosNoDia = (todasSolicitacoes || []).filter(
             (x) =>
               x.id !== sol.id &&
@@ -811,7 +826,7 @@ function EditarSolicitacaoSheet({
               !['negado', 'cancelado'].includes(x.status || 'pendente')
           )
           const conflitosSlot = horarioAgendamento
-            ? ocupadosNoDia.filter((x) => x.horario_agendamento === horarioAgendamento)
+            ? ocupadosNoDia.filter((x) => periodosConflitam(x.horario_agendamento, horarioAgendamento))
             : []
 
           return (
@@ -821,9 +836,15 @@ function EditarSolicitacaoSheet({
                   <Calendar className="w-3.5 h-3.5" style={{ color: 'var(--as-accent)' }} />
                   {sol.status === 'aprovado' ? 'Reagendar Data e Horário' : 'Data e Horário'}
                 </span>
-                {diaSemana === 6 && (
+                {dataAgendamento && (
                   <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200">
-                    Sábado · Manhã
+                    {cfgDia.ativo
+                      ? cfgDia.origem === 'especial' && cfgDia.motivo
+                        ? cfgDia.motivo
+                        : `${slotsGrade.length} período(s)`
+                      : cfgDia.motivo
+                        ? `Fechado (${cfgDia.motivo})`
+                        : 'Dia fechado'}
                   </span>
                 )}
               </div>
@@ -835,50 +856,61 @@ function EditarSolicitacaoSheet({
                 className="w-full px-3.5 py-2.5 text-sm bg-gray-50/50 border border-[var(--as-soft)] rounded-2xl focus:outline-none focus:border-[var(--as-accent)]"
               />
 
-              {diaSemana === 0 && (
+              {dataAgendamento && !cfgDia.ativo && (
                 <p className="text-[11px] font-semibold text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 flex items-center gap-1.5">
                   <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-amber-600" />
-                  Domingo selecionado (normalmente fechado). Você ainda pode definir manualmente abaixo se for exceção.
+                  {cfgDia.origem === 'especial' && cfgDia.motivo
+                    ? `Data marcada como fechada (${cfgDia.motivo}). Você ainda pode definir manualmente abaixo se for exceção.`
+                    : 'Dia fechado na grade configurada. Você ainda pode definir manualmente abaixo se for exceção.'}
                 </p>
               )}
 
-              <div className="flex flex-col gap-1.5">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
-                  Períodos padrão (2h30)
-                </span>
-                <div className="grid grid-cols-2 gap-2">
-                  {(horariosSugeridos.length > 0 ? horariosSugeridos : HORARIOS_SEMANA).map((slot) => {
-                    const selecionado = horarioAgendamento === slot
-                    const outroOcupando = ocupadosNoDia.some((x) => x.horario_agendamento === slot)
-                    return (
-                      <button
-                        key={slot}
-                        type="button"
-                        onClick={() => setHorarioAgendamento(slot)}
-                        className={`px-2.5 py-2 rounded-xl border text-xs font-bold transition cursor-pointer flex flex-col items-start gap-0.5 ${
-                          selecionado
-                            ? 'text-white shadow-xs'
-                            : outroOcupando
-                              ? 'border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100'
-                              : 'border-[var(--as-soft)] bg-gray-50/70 text-gray-700 hover:bg-gray-100'
-                        }`}
-                        style={
-                          selecionado
-                            ? { backgroundColor: 'var(--as-accent)', borderColor: 'var(--as-accent)' }
-                            : undefined
-                        }
-                      >
-                        <span>{slot}</span>
-                        {outroOcupando && (
-                          <span className={`text-[9px] ${selecionado ? 'text-white/90' : 'text-amber-700'}`}>
-                            Outro pedido neste horário
-                          </span>
-                        )}
-                      </button>
-                    )
-                  })}
+              {opcoesHorarios.length > 0 && (
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                    Períodos configurados
+                  </span>
+                  <div className="grid grid-cols-2 gap-2">
+                    {opcoesHorarios.map(({ id: slot, legado }) => {
+                      const selecionado = horarioAgendamento === slot
+                      const outroOcupando = ocupadosNoDia.some((x) =>
+                        periodosConflitam(x.horario_agendamento, slot)
+                      )
+                      return (
+                        <button
+                          key={slot}
+                          type="button"
+                          onClick={() => setHorarioAgendamento(slot)}
+                          className={`px-2.5 py-2 rounded-xl border text-xs font-bold transition cursor-pointer flex flex-col items-start gap-0.5 ${
+                            selecionado
+                              ? 'text-white shadow-xs'
+                              : outroOcupando
+                                ? 'border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100'
+                                : 'border-[var(--as-soft)] bg-gray-50/70 text-gray-700 hover:bg-gray-100'
+                          }`}
+                          style={
+                            selecionado
+                              ? { backgroundColor: 'var(--as-accent)', borderColor: 'var(--as-accent)' }
+                              : undefined
+                          }
+                        >
+                          <span>{slot}</span>
+                          {legado && (
+                            <span className={`text-[9px] ${selecionado ? 'text-white/90' : 'text-gray-400'}`}>
+                              Grade anterior
+                            </span>
+                          )}
+                          {outroOcupando && (
+                            <span className={`text-[9px] ${selecionado ? 'text-white/90' : 'text-amber-700'}`}>
+                              Conflito nesta faixa
+                            </span>
+                          )}
+                        </button>
+                      )
+                    })}
+                  </div>
                 </div>
-              </div>
+              )}
 
               <input
                 type="text"
@@ -893,7 +925,7 @@ function EditarSolicitacaoSheet({
                   <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5 text-amber-600" />
                   <span>
                     Já existe {conflitosSlot.length === 1 ? 'outro atendimento' : `${conflitosSlot.length} outros atendimentos`} em{' '}
-                    <strong>{formatarDataIsoBr(dataAgendamento)}</strong> ({horarioAgendamento}):{' '}
+                    <strong>{formatarDataIsoBr(dataAgendamento)}</strong> com sobreposição em ({horarioAgendamento}):{' '}
                     {conflitosSlot.map((c) => c.nome_cliente).join(', ')}.
                   </span>
                 </div>
@@ -973,6 +1005,21 @@ function EditarSolicitacaoSheet({
   )
 }
 
+async function carregarConfigAgendaEstudio(tenantId) {
+  try {
+    const { data, error } = await supabase.rpc('listar_config_agenda_publico', {
+      p_tenant_id: tenantId,
+    })
+    if (error || !data || data.habilitado === false || !Array.isArray(data.semana)) {
+      return PADRAO_CONFIG_AGENDA
+    }
+    return normalizarConfigAgenda(data)
+  } catch (err) {
+    console.warn('Usando grade de horários padrão até aplicação da migration:', err)
+    return PADRAO_CONFIG_AGENDA
+  }
+}
+
 async function buscarDashboardTenant(tId = null) {
   const { tenantId: currentTenant, vinculos } = await resolverTenantAtivo(tId)
   const [{ data: tData }, { data: assData }, { data: catData }, { data: servicosData, error: errServ }, { data: solicitacoesData, error: errSol }] =
@@ -1002,6 +1049,9 @@ async function buscarDashboardTenant(tId = null) {
   if (errServ) throw errServ
   if (errSol) throw errSol
 
+  const isEstudio = isNailDesign(tData?.segmento)
+  const configAgenda = isEstudio ? await carregarConfigAgendaEstudio(currentTenant) : null
+
   return {
     currentTenant,
     vinculos,
@@ -1010,6 +1060,7 @@ async function buscarDashboardTenant(tId = null) {
     catData: catData || [],
     servicosData: servicosData || [],
     solicitacoesData: solicitacoesData || [],
+    configAgenda,
   }
 }
 
@@ -1022,6 +1073,8 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [detalheSolId, setDetalheSolId] = useState(null)
   const [editingSolId, setEditingSolId] = useState(null)
+  const [horariosAberto, setHorariosAberto] = useState(false)
+  const [configAgenda, setConfigAgenda] = useState(PADRAO_CONFIG_AGENDA)
   const [agoraMs, setAgoraMs] = useState(() => Date.now())
 
   const [swipeCardId, setSwipeCardId] = useState(null)
@@ -1079,6 +1132,7 @@ export default function Dashboard() {
     setCategorias(dados.catData)
     setServicos(dados.servicosData)
     setSolicitacoes(dados.solicitacoesData)
+    setConfigAgenda(dados.configAgenda || PADRAO_CONFIG_AGENDA)
     setAgoraMs(Date.now())
   }, [])
 
@@ -1138,6 +1192,32 @@ export default function Dashboard() {
           fetchDados()
         }
       )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'config_horarios_semana' },
+        (payload) => {
+          const tenantAtual = localStorage.getItem('as_active_tenant')
+          const tenantEvento = payload?.new?.tenant_id || payload?.old?.tenant_id
+          if (tenantAtual && (!tenantEvento || tenantEvento === tenantAtual)) {
+            carregarConfigAgendaEstudio(tenantAtual).then((cfg) => {
+              if (ativo) setConfigAgenda(cfg)
+            })
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'config_datas_especiais' },
+        (payload) => {
+          const tenantAtual = localStorage.getItem('as_active_tenant')
+          const tenantEvento = payload?.new?.tenant_id || payload?.old?.tenant_id
+          if (tenantAtual && (!tenantEvento || tenantEvento === tenantAtual)) {
+            carregarConfigAgendaEstudio(tenantAtual).then((cfg) => {
+              if (ativo) setConfigAgenda(cfg)
+            })
+          }
+        }
+      )
       .subscribe()
 
     return () => {
@@ -1150,6 +1230,8 @@ export default function Dashboard() {
     setActiveTenantId(novoTenantId)
     setDetalheSolId(null)
     setEditingSolId(null)
+    setHorariosAberto(false)
+    setConfigAgenda(PADRAO_CONFIG_AGENDA)
     localStorage.setItem('as_active_tenant', novoTenantId)
     fetchDados(novoTenantId)
   }
@@ -1278,6 +1360,9 @@ export default function Dashboard() {
     [solicitacoes, editingSolId]
   )
 
+  const metaSegmento = getSegmentoMeta(tenantInfo?.segmento)
+  const isEstudio = metaSegmento.isNail
+
   if (verificarBloqueioAssinatura(assinatura)) {
     return (
       <BloqueioInadimplencia
@@ -1298,6 +1383,24 @@ export default function Dashboard() {
       onTrocarTenant={handleTrocarTenant}
       pendentesCount={contagemPorStatus.pendente}
       onDeslogar={() => deslogarAdmin(navigate)}
+      headerRight={
+        isEstudio ? (
+          <button
+            type="button"
+            onClick={() => setHorariosAberto(true)}
+            className="flex items-center gap-1.5 text-xs font-bold px-2.5 sm:px-3 py-1.5 rounded-xl border transition-all cursor-pointer active:scale-95"
+            style={{
+              backgroundColor: 'var(--as-blush)',
+              borderColor: 'var(--as-soft)',
+              color: 'var(--as-accent-deep)',
+            }}
+            title="Configurar horários de atendimento"
+          >
+            <Clock className="w-4 h-4" />
+            <span className={userTenants.length > 1 ? 'hidden sm:inline' : ''}>Horários</span>
+          </button>
+        ) : null
+      }
     >
       <PuxarAtualizar
         aoAtualizar={() => fetchDados(activeTenantId)}
@@ -1339,7 +1442,11 @@ export default function Dashboard() {
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
             <input
               type="text"
-              placeholder="Buscar cliente, telefone, código (#AG) ou item"
+              placeholder={
+                isEstudio
+                  ? 'Buscar cliente, telefone, código (#AG) ou serviço'
+                  : 'Buscar cliente, telefone, código ou produto'
+              }
               value={pesquisa}
               onChange={(e) => setPesquisa(e.target.value)}
               className="w-full pl-10 pr-4 py-2.5 bg-white border border-[var(--as-soft)] rounded-2xl focus:outline-none focus:border-[var(--as-accent)] text-xs sm:text-sm text-gray-800 shadow-2xs"
@@ -1437,8 +1544,21 @@ export default function Dashboard() {
           todasSolicitacoes={solicitacoes}
           servicos={servicos}
           opcionaisDisponiveis={opcionaisDisponiveis}
+          isEstudio={isEstudio}
+          configAgenda={configAgenda}
           aoFechar={() => setEditingSolId(null)}
           aoSalvo={() => fetchDados(activeTenantId)}
+        />
+      )}
+
+      {isEstudio && horariosAberto && (
+        <HorariosSheet
+          tenantId={activeTenantId}
+          tenantNome={tenantInfo?.nome}
+          configAgenda={configAgenda}
+          solicitacoes={solicitacoes}
+          onSalvo={(novaCfg) => setConfigAgenda(novaCfg)}
+          aoFechar={() => setHorariosAberto(false)}
         />
       )}
     </AdminShell>
