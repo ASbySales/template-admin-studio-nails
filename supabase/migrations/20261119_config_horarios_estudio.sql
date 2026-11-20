@@ -1,13 +1,17 @@
 -- ============================================================================
--- AS GESTÃO (Projeto Supabase: lbtbxkwffixnvbsibcip, schema public)
+-- AS GESTÃO (Projeto Supabase: lbtbxkwffixnvbsibcip, schema public + private)
 -- Migração: Grade dinâmica de horários e datas especiais APENAS para Estúdios (Nail Design)
+-- Auditada e aplicada via Supabase MCP em 2026-11-20 (config_horarios_dinamicos_estudio).
 -- Lojas de vendas / Floricultura permanecem intactas e sem configuração de horários.
 -- ============================================================================
 
-BEGIN;
+-- Schema interno não exposto pela API pública
+CREATE SCHEMA IF NOT EXISTS private;
+REVOKE ALL ON SCHEMA private FROM PUBLIC;
+GRANT USAGE ON SCHEMA private TO anon, authenticated;
 
--- 1. Helper canônico de segmento: identifica tenants de Nail Design / Estúdio
-CREATE OR REPLACE FUNCTION public.eh_tenant_estudio(p_tenant_id text)
+-- 1. Helper canônico de segmento em schema privado
+CREATE OR REPLACE FUNCTION private.eh_tenant_estudio(p_tenant_id text)
 RETURNS boolean
 LANGUAGE sql
 STABLE
@@ -18,6 +22,7 @@ AS $$
     SELECT 1
     FROM public.tenants AS t
     WHERE t.id = p_tenant_id
+      AND t.ativo IS TRUE
       AND pg_catalog.lower(pg_catalog.btrim(COALESCE(t.segmento, ''))) IN (
         'nails',
         'nail_design',
@@ -31,8 +36,8 @@ AS $$
   );
 $$;
 
-REVOKE ALL ON FUNCTION public.eh_tenant_estudio(text) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.eh_tenant_estudio(text) TO anon, authenticated;
+REVOKE ALL ON FUNCTION private.eh_tenant_estudio(text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION private.eh_tenant_estudio(text) TO anon, authenticated;
 
 -- 2. Tabelas multi-tenant de horários semanais (0..6) e exceções por data
 CREATE TABLE IF NOT EXISTS public.config_horarios_semana (
@@ -58,7 +63,7 @@ CREATE TABLE IF NOT EXISTS public.config_datas_especiais (
     CHECK (ativo = false OR COALESCE(pg_catalog.array_length(periodos, 1), 0) > 0)
 );
 
--- Seed idempotente apenas para tenants do segmento estúdio / nail design
+-- Seed idempotente apenas para tenants estúdio / nail design
 INSERT INTO public.config_horarios_semana (tenant_id, dia_semana, ativo, periodos)
 SELECT
   t.id,
@@ -76,7 +81,7 @@ CROSS JOIN (
     (5::smallint, true,  ARRAY['07:00 - 09:30', '09:30 - 12:00', '13:00 - 15:30', '15:30 - 18:00']::text[]),
     (6::smallint, true,  ARRAY['07:00 - 09:30', '09:30 - 12:00']::text[])
 ) AS d(dia_semana, ativo, periodos)
-WHERE public.eh_tenant_estudio(t.id)
+WHERE private.eh_tenant_estudio(t.id)
 ON CONFLICT (tenant_id, dia_semana) DO NOTHING;
 
 -- 3. RLS, privilégios mínimos e Realtime
@@ -92,58 +97,98 @@ GRANT SELECT ON TABLE public.config_horarios_semana, public.config_datas_especia
 GRANT INSERT, UPDATE, DELETE ON TABLE public.config_horarios_semana, public.config_datas_especiais
   TO authenticated;
 
-DROP POLICY IF EXISTS "config_horarios_semana: leitura publica estudio" ON public.config_horarios_semana;
-CREATE POLICY "config_horarios_semana: leitura publica estudio"
-  ON public.config_horarios_semana
-  FOR SELECT TO anon, authenticated
-  USING (public.eh_tenant_estudio(tenant_id));
-
-DROP POLICY IF EXISTS "config_horarios_semana: admin insert estudio" ON public.config_horarios_semana;
-CREATE POLICY "config_horarios_semana: admin insert estudio"
-  ON public.config_horarios_semana
-  FOR INSERT TO authenticated
-  WITH CHECK (public.eh_admin_tenant(tenant_id) AND public.eh_tenant_estudio(tenant_id));
-
-DROP POLICY IF EXISTS "config_horarios_semana: admin update estudio" ON public.config_horarios_semana;
-CREATE POLICY "config_horarios_semana: admin update estudio"
-  ON public.config_horarios_semana
-  FOR UPDATE TO authenticated
-  USING (public.eh_admin_tenant(tenant_id) AND public.eh_tenant_estudio(tenant_id))
-  WITH CHECK (public.eh_admin_tenant(tenant_id) AND public.eh_tenant_estudio(tenant_id));
-
-DROP POLICY IF EXISTS "config_horarios_semana: admin delete estudio" ON public.config_horarios_semana;
-CREATE POLICY "config_horarios_semana: admin delete estudio"
-  ON public.config_horarios_semana
-  FOR DELETE TO authenticated
-  USING (public.eh_admin_tenant(tenant_id) AND public.eh_tenant_estudio(tenant_id));
-
-DROP POLICY IF EXISTS "config_datas_especiais: leitura publica estudio" ON public.config_datas_especiais;
-CREATE POLICY "config_datas_especiais: leitura publica estudio"
-  ON public.config_datas_especiais
-  FOR SELECT TO anon, authenticated
-  USING (public.eh_tenant_estudio(tenant_id));
-
-DROP POLICY IF EXISTS "config_datas_especiais: admin insert estudio" ON public.config_datas_especiais;
-CREATE POLICY "config_datas_especiais: admin insert estudio"
-  ON public.config_datas_especiais
-  FOR INSERT TO authenticated
-  WITH CHECK (public.eh_admin_tenant(tenant_id) AND public.eh_tenant_estudio(tenant_id));
-
-DROP POLICY IF EXISTS "config_datas_especiais: admin update estudio" ON public.config_datas_especiais;
-CREATE POLICY "config_datas_especiais: admin update estudio"
-  ON public.config_datas_especiais
-  FOR UPDATE TO authenticated
-  USING (public.eh_admin_tenant(tenant_id) AND public.eh_tenant_estudio(tenant_id))
-  WITH CHECK (public.eh_admin_tenant(tenant_id) AND public.eh_tenant_estudio(tenant_id));
-
-DROP POLICY IF EXISTS "config_datas_especiais: admin delete estudio" ON public.config_datas_especiais;
-CREATE POLICY "config_datas_especiais: admin delete estudio"
-  ON public.config_datas_especiais
-  FOR DELETE TO authenticated
-  USING (public.eh_admin_tenant(tenant_id) AND public.eh_tenant_estudio(tenant_id));
-
 DO $$
 BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'config_horarios_semana'
+      AND policyname = 'config_horarios_semana: leitura publica estudio'
+  ) THEN
+    CREATE POLICY "config_horarios_semana: leitura publica estudio"
+      ON public.config_horarios_semana
+      FOR SELECT TO anon, authenticated
+      USING (private.eh_tenant_estudio(tenant_id));
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'config_horarios_semana'
+      AND policyname = 'config_horarios_semana: admin insert estudio'
+  ) THEN
+    CREATE POLICY "config_horarios_semana: admin insert estudio"
+      ON public.config_horarios_semana
+      FOR INSERT TO authenticated
+      WITH CHECK (public.eh_admin_tenant(tenant_id) AND private.eh_tenant_estudio(tenant_id));
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'config_horarios_semana'
+      AND policyname = 'config_horarios_semana: admin update estudio'
+  ) THEN
+    CREATE POLICY "config_horarios_semana: admin update estudio"
+      ON public.config_horarios_semana
+      FOR UPDATE TO authenticated
+      USING (public.eh_admin_tenant(tenant_id) AND private.eh_tenant_estudio(tenant_id))
+      WITH CHECK (public.eh_admin_tenant(tenant_id) AND private.eh_tenant_estudio(tenant_id));
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'config_horarios_semana'
+      AND policyname = 'config_horarios_semana: admin delete estudio'
+  ) THEN
+    CREATE POLICY "config_horarios_semana: admin delete estudio"
+      ON public.config_horarios_semana
+      FOR DELETE TO authenticated
+      USING (public.eh_admin_tenant(tenant_id) AND private.eh_tenant_estudio(tenant_id));
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'config_datas_especiais'
+      AND policyname = 'config_datas_especiais: leitura publica estudio'
+  ) THEN
+    CREATE POLICY "config_datas_especiais: leitura publica estudio"
+      ON public.config_datas_especiais
+      FOR SELECT TO anon, authenticated
+      USING (private.eh_tenant_estudio(tenant_id));
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'config_datas_especiais'
+      AND policyname = 'config_datas_especiais: admin insert estudio'
+  ) THEN
+    CREATE POLICY "config_datas_especiais: admin insert estudio"
+      ON public.config_datas_especiais
+      FOR INSERT TO authenticated
+      WITH CHECK (public.eh_admin_tenant(tenant_id) AND private.eh_tenant_estudio(tenant_id));
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'config_datas_especiais'
+      AND policyname = 'config_datas_especiais: admin update estudio'
+  ) THEN
+    CREATE POLICY "config_datas_especiais: admin update estudio"
+      ON public.config_datas_especiais
+      FOR UPDATE TO authenticated
+      USING (public.eh_admin_tenant(tenant_id) AND private.eh_tenant_estudio(tenant_id))
+      WITH CHECK (public.eh_admin_tenant(tenant_id) AND private.eh_tenant_estudio(tenant_id));
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'config_datas_especiais'
+      AND policyname = 'config_datas_especiais: admin delete estudio'
+  ) THEN
+    CREATE POLICY "config_datas_especiais: admin delete estudio"
+      ON public.config_datas_especiais
+      FOR DELETE TO authenticated
+      USING (public.eh_admin_tenant(tenant_id) AND private.eh_tenant_estudio(tenant_id));
+  END IF;
+
   IF EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'supabase_realtime') THEN
     IF NOT EXISTS (
       SELECT 1 FROM pg_publication_tables
@@ -175,6 +220,7 @@ CREATE OR REPLACE FUNCTION public.periodo_para_minutos(
 RETURNS record
 LANGUAGE plpgsql
 IMMUTABLE
+SECURITY INVOKER
 SET search_path = ''
 AS $$
 DECLARE
@@ -205,6 +251,7 @@ CREATE OR REPLACE FUNCTION public.periodos_conflitam(p_a text, p_b text)
 RETURNS boolean
 LANGUAGE plpgsql
 IMMUTABLE
+SECURITY INVOKER
 SET search_path = ''
 AS $$
 DECLARE
@@ -230,6 +277,7 @@ CREATE OR REPLACE FUNCTION public.normalizar_periodos_validados(p_periodos_json 
 RETURNS text[]
 LANGUAGE plpgsql
 IMMUTABLE
+SECURITY INVOKER
 SET search_path = ''
 AS $$
 DECLARE
@@ -290,6 +338,7 @@ CREATE OR REPLACE FUNCTION public.obter_periodos_data_config(
 RETURNS text[]
 LANGUAGE plpgsql
 STABLE
+SECURITY INVOKER
 SET search_path = ''
 AS $$
 DECLARE
@@ -297,7 +346,7 @@ DECLARE
   v_sem record;
   v_dow smallint;
 BEGIN
-  IF p_tenant_id IS NULL OR p_data IS NULL OR NOT public.eh_tenant_estudio(p_tenant_id) THEN
+  IF p_tenant_id IS NULL OR p_data IS NULL OR NOT private.eh_tenant_estudio(p_tenant_id) THEN
     RETURN ARRAY[]::text[];
   END IF;
 
@@ -349,15 +398,16 @@ GRANT EXECUTE ON FUNCTION public.normalizar_periodos_validados(jsonb) TO authent
 REVOKE ALL ON FUNCTION public.obter_periodos_data_config(text, date) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.obter_periodos_data_config(text, date) TO anon, authenticated;
 
--- 5. RPC pública multi-tenant para leitura da grade (retorna habilitado=false para lojas/floricultura)
+-- 5. RPC pública multi-tenant para leitura da grade (habilitado=false para lojas/floricultura)
 CREATE OR REPLACE FUNCTION public.listar_config_agenda_publico(p_tenant_id text)
 RETURNS jsonb
 LANGUAGE sql
 STABLE
+SECURITY INVOKER
 SET search_path = ''
 AS $$
   SELECT CASE
-    WHEN NOT public.eh_tenant_estudio(p_tenant_id) THEN
+    WHEN NOT private.eh_tenant_estudio(p_tenant_id) THEN
       pg_catalog.jsonb_build_object(
         'habilitado', false,
         'semana', '[]'::jsonb,
@@ -410,7 +460,7 @@ $$;
 REVOKE ALL ON FUNCTION public.listar_config_agenda_publico(text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.listar_config_agenda_publico(text) TO anon, authenticated;
 
--- 6. RPC administrativa atômica para salvar grade semanal e exceções por data do estúdio
+-- 6. RPC administrativa (SECURITY INVOKER apoiada em RLS) para salvar grade semanal e datas especiais
 CREATE OR REPLACE FUNCTION public.salvar_config_horarios_tenant(
   p_tenant_id text,
   p_semana jsonb,
@@ -419,7 +469,7 @@ CREATE OR REPLACE FUNCTION public.salvar_config_horarios_tenant(
 )
 RETURNS jsonb
 LANGUAGE plpgsql
-SECURITY DEFINER
+SECURITY INVOKER
 SET search_path = ''
 AS $$
 DECLARE
@@ -439,7 +489,7 @@ BEGIN
       message = 'Acesso negado: apenas administradores do estúdio podem alterar horários.';
   END IF;
 
-  IF NOT public.eh_tenant_estudio(p_tenant_id) THEN
+  IF NOT private.eh_tenant_estudio(p_tenant_id) THEN
     RAISE EXCEPTION USING
       errcode = '22023',
       message = 'Configuração de horários está disponível apenas para estúdios (Nail Design).';
@@ -519,18 +569,11 @@ $$;
 REVOKE ALL ON FUNCTION public.salvar_config_horarios_tenant(text, jsonb, jsonb, date[]) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.salvar_config_horarios_tenant(text, jsonb, jsonb, date[]) TO authenticated;
 
--- Índice parcial para acelerar consulta de ocupação por tenant/data
-CREATE INDEX IF NOT EXISTS idx_solicitacoes_tenant_data_ativas
-  ON public.solicitacoes_agendamento (tenant_id, data_agendamento)
-  WHERE data_agendamento IS NOT NULL AND status IN ('pendente', 'aprovado', 'cumprido');
-
--- 7. Atualiza listar_datas_ocupadas_publico(p_tenant_id) preservando contrato + sobreposição
-DROP FUNCTION IF EXISTS public.listar_datas_ocupadas_publico(text);
-
-CREATE FUNCTION public.listar_datas_ocupadas_publico(p_tenant_id text)
+-- 7. Atualiza listar_datas_ocupadas_publico(p_tenant_id) preservando total_agendamentos bigint + sobreposição
+CREATE OR REPLACE FUNCTION public.listar_datas_ocupadas_publico(p_tenant_id text)
 RETURNS TABLE (
   data_agendamento date,
-  total_agendamentos integer,
+  total_agendamentos bigint,
   possui_aprovado boolean,
   horarios_ocupados text[],
   horarios_aprovados text[]
@@ -549,7 +592,7 @@ AS $$
       public.obter_periodos_data_config(p_tenant_id, s.data_agendamento) AS grade_atual
     FROM public.solicitacoes_agendamento AS s
     WHERE s.tenant_id = p_tenant_id
-      AND public.eh_tenant_estudio(p_tenant_id)
+      AND private.eh_tenant_estudio(p_tenant_id)
       AND s.data_agendamento IS NOT NULL
       AND s.data_agendamento >= (pg_catalog.now() AT TIME ZONE 'America/Sao_Paulo')::date
       AND COALESCE(s.status, 'pendente') IN ('pendente', 'aprovado', 'cumprido')
@@ -578,11 +621,11 @@ AS $$
   SELECT
     d.data_agendamento,
     COALESCE((
-      SELECT COUNT(DISTINCT sa.slot_txt)::integer
+      SELECT pg_catalog.count(DISTINCT sa.slot_txt)::bigint
       FROM slots_afetados AS sa
       WHERE sa.data_agendamento = d.data_agendamento
         AND sa.slot_txt = ANY(sa.grade_atual)
-    ), 0) AS total_agendamentos,
+    ), 0::bigint) AS total_agendamentos,
     EXISTS (
       SELECT 1
       FROM base AS b
@@ -590,12 +633,12 @@ AS $$
         AND b.status IN ('aprovado', 'cumprido')
     ) AS possui_aprovado,
     COALESCE((
-      SELECT ARRAY_AGG(DISTINCT sa.slot_txt)
+      SELECT pg_catalog.array_agg(DISTINCT sa.slot_txt)
       FROM slots_afetados AS sa
       WHERE sa.data_agendamento = d.data_agendamento
     ), ARRAY[]::text[]) AS horarios_ocupados,
     COALESCE((
-      SELECT ARRAY_AGG(DISTINCT sa.slot_txt)
+      SELECT pg_catalog.array_agg(DISTINCT sa.slot_txt)
       FROM slots_afetados AS sa
       WHERE sa.data_agendamento = d.data_agendamento
         AND sa.status IN ('aprovado', 'cumprido')
@@ -607,28 +650,8 @@ $$;
 REVOKE ALL ON FUNCTION public.listar_datas_ocupadas_publico(text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.listar_datas_ocupadas_publico(text) TO anon, authenticated;
 
--- 8. Remove eventual CHECK hardcoded antiga de horário (preserva 'A combinar' e NULL das lojas)
-DO $$
-DECLARE
-  v_con record;
-BEGIN
-  FOR v_con IN
-    SELECT c.conname
-    FROM pg_constraint AS c
-    WHERE c.conrelid = 'public.solicitacoes_agendamento'::regclass
-      AND c.contype = 'c'
-      AND pg_catalog.pg_get_constraintdef(c.oid) ILIKE '%07:00 - 09:30%'
-  LOOP
-    EXECUTE pg_catalog.format(
-      'ALTER TABLE public.solicitacoes_agendamento DROP CONSTRAINT IF EXISTS %I',
-      v_con.conname
-    );
-  END LOOP;
-END;
-$$;
-
--- Trigger de proteção server-side APENAS para solicitações públicas de estúdios
-CREATE OR REPLACE FUNCTION public.validar_horario_agendamento_estudio_ins()
+-- 8. Trigger de proteção server-side em schema privado APENAS para solicitações de estúdios
+CREATE OR REPLACE FUNCTION private.validar_horario_agendamento_estudio_ins()
 RETURNS trigger
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -639,14 +662,11 @@ DECLARE
   v_permitidos text[];
   v_horario_norm text;
 BEGIN
-  -- Lojas de vendas / floricultura passam sem alteração
-  IF NOT public.eh_tenant_estudio(NEW.tenant_id) THEN
+  IF NOT private.eh_tenant_estudio(NEW.tenant_id) THEN
     RETURN NEW;
   END IF;
 
-  -- Administradora autenticada ou chamada service_role pode registrar exceções
-  IF pg_catalog.current_setting('request.jwt.claim.role', true) = 'service_role'
-     OR public.eh_admin_tenant(NEW.tenant_id) THEN
+  IF pg_catalog.current_setting('request.jwt.claim.role', true) = 'service_role' THEN
     RETURN NEW;
   END IF;
 
@@ -692,12 +712,9 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.validar_horario_agendamento_estudio_ins() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION private.validar_horario_agendamento_estudio_ins() FROM PUBLIC, anon, authenticated;
 
-DROP TRIGGER IF EXISTS trg_validar_horario_agendamento_estudio_ins ON public.solicitacoes_agendamento;
-CREATE TRIGGER trg_validar_horario_agendamento_estudio_ins
+CREATE OR REPLACE TRIGGER trg_validar_horario_agendamento_estudio_ins
   BEFORE INSERT ON public.solicitacoes_agendamento
   FOR EACH ROW
-  EXECUTE FUNCTION public.validar_horario_agendamento_estudio_ins();
-
-COMMIT;
+  EXECUTE FUNCTION private.validar_horario_agendamento_estudio_ins();
